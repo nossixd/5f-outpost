@@ -1,0 +1,12 @@
+<!doctype html>
+<html lang="pl">
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>OUTPOST · Ryzyko opóźnień</title><link rel="stylesheet" href="/style.css"><script src="/app.js" defer></script></head>
+<body><header><strong>OUTPOST</strong><span>Panel dyspozytora</span></header><main>
+<h1>Ryzyko opóźnień</h1><p>Sprawdź, które dostawy wymagają uwagi, i otwórz szczegóły powiadomienia.</p>
+<p id="source">Pobieranie danych…</p>
+<form id="filters"><label for="threshold">Próg ryzyka (minuty)</label><input id="threshold" type="number" min="0" max="1440" step="any" value="5" required><button>Oceń ryzyko</button></form>
+<p>Alert pojawia się, gdy opóźnienie jest większe od progu. Brak wiarygodnego ETA uniemożliwia ocenę.</p>
+<p id="error" role="alert"></p><section aria-labelledby="alerts-title"><h2 id="alerts-title">Powiadomienia</h2><div id="alerts" aria-live="polite"></div></section>
+<section aria-labelledby="orders-title"><h2 id="orders-title">Zlecenia</h2><div class="scroll"><table><thead><tr><th>Zlecenie / trasa</th><th>Planowana dostawa</th><th>ETA</th><th>Ocena</th></tr></thead><tbody id="orders"></tbody></table></div></section>
+<dialog id="details" aria-labelledby="detail-title"><h2 id="detail-title">Szczegóły opóźnienia</h2><dl id="detail-content"></dl><form method="dialog"><button>Zamknij</button></form></dialog>
+</main></body></html>

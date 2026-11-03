@@ -40,10 +40,18 @@ test('interfejs: trzy alerty, zatwierdzenie i odrzucenie', async () => {
   assert.equal(elements['notification-count'].textContent, '3');
   click(cardActions(elements.alerts.children[0])[0]); await complete(1);
   assert.equal(elements['notification-count'].textContent, '2');
-  assert.equal(elements.orders.children[0].children[3].children[0].textContent, 'Zatwierdzono opóźnienie');
+  assert.equal(elements.orders.children[0].children[3].children[0].textContent, 'Opóźnienie potwierdzone · 25 min');
   click(cardActions(elements.alerts.children[0])[1]); await complete(2);
+  assert.equal(elements['notification-count'].textContent, '2');
+  assert.equal(elements.orders.children[1].children[3].children[0].textContent, 'Wymaga aktualizacji ETA');
+  assert.equal(elements.orders.children[1].children[2].textContent, 'Prognoza odrzucona');
+  const controls = cardActions(elements.alerts.children[0]);
+  assert.deepEqual(controls.map(control => control.textContent), ['Zmień czas', 'Szczegóły']);
+  click(controls[0]);
+  elements['eta-input'].value = '2026-11-02T12:00';
+  elements['eta-form'].listeners.submit({ preventDefault() {} }); await complete(3);
   assert.equal(elements['notification-count'].textContent, '1');
-  assert.equal(elements.orders.children[1].children[3].children[0].textContent, 'Odrzucono alert');
+  assert.equal(elements.orders.children[1].children[3].children[0].textContent, 'W terminie');
 });
 test('interfejs: górne Powiadomienia, szczegóły i edycja ETA', async () => {
   const { elements, complete } = setup(); await complete(0);

@@ -141,3 +141,12 @@ API --> UI : JSON / błąd
 UI --> Dyspozytor : odświeżona lista i tabela / komunikat błędu
 @enduml
 ```
+
+## Rozróżnienie decyzji (ADR-008)
+
+Zatwierdzenie pozostawia wiarygodną prognozę i potwierdzone opóźnienie, usuwając
+powiadomienie z kolejki uwagi. Odrzucenie zapisuje eta_reliable=false i decision=rejected;
+ocena zwraca eta_update_required oraz powiadomienie o koniecznej korekcie. W tym stanie
+opóźnienie ma wartość null, nie jest obliczane z odrzuconego czasu. PATCH approve
+z niewiarygodnym ETA zwraca 409. Reschedule zapisuje nowe ETA, przywraca wiarygodność,
+czyści decyzję i ponawia ocenę. Dotyczy magazynu w pamięci oraz PostgreSQL.

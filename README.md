@@ -14,7 +14,10 @@ npm start
 Otwórz http://127.0.0.1:3000. Początkowe trzy alerty: TR-001 (+25 min), TR-002
 (+40 min), TR-003 (+15 min). TR-004 pokazuje przypadek braku wiarygodnego ETA.
 
-Zatwierdź i Odrzuć zapisują decyzję dotyczącą alertu, nie status realizacji transportu.
+Zatwierdź opóźnienie obsługuje alert, pozostawiając potwierdzone opóźnienie w tabeli.
+Odrzuć prognozę oznacza ETA jako niewiarygodne i pozostawia dostawę na liście uwagi
+z komunikatem Wymaga aktualizacji ETA. Dopiero nowy czas umożliwia ponowną ocenę.
+Obie akcje zapisują decyzję, nie zmieniają statusu realizacji transportu.
 Zmień czas edytuje ETA (plan dostawy pozostaje bez zmian), czyści wcześniejszą decyzję
 i ponownie ocenia ryzyko. Decyzje pozostają widoczne w tabeli wraz z datą.
 Nie ma filtra progu; reguła serwera to opóźnienie większe niż 5 minut.

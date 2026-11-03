@@ -9,11 +9,13 @@ W sekcji Dostawy wymagające uwagi widzimy trzy zlecenia. Każda karta pokazuje
 trasę, planowaną dostawę, ETA i opóźnienie. Górne Powiadomienia otwierają tę samą
 listę w oknie. Szczegóły pokazują komplet informacji o wybranej dostawie.
 
-Przy TR-001 wybieram Zatwierdź. To oznacza przyjęcie informacji o opóźnieniu.
-Alert znika z listy uwagi, a w tabeli zostaje decyzja z datą.
+Przy TR-001 wybieram Zatwierdź opóźnienie. To oznacza przyjęcie informacji o opóźnieniu.
+Alert znika z listy uwagi, a w tabeli zostaje potwierdzone opóźnienie 25 minut i data decyzji.
 
-Przy TR-002 wybieram Odrzuć. Odrzucam alert, nie anuluję transportu.
-Decyzja również jest zapisana w tabeli.
+Przy TR-002 wybieram Odrzuć prognozę. Uznaję ETA za niewiarygodne, nie anuluję transportu.
+Dostawa pozostaje na liście uwagi z oznaczeniem Wymaga aktualizacji ETA. System nie
+oblicza opóźnienia z odrzuconego czasu. Wybieram Zmień czas i podaję poprawne ETA.
+Po zapisie system ponownie ocenia ryzyko.
 
 Przy TR-003 wybieram Zmień czas. Wpisuję nowy przewidywany czas przyjazdu,
 np. 02.11.2026 o 15:55, i zapisuję. System ponownie porównuje ETA z planem 16:00.

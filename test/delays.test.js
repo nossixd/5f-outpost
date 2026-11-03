@@ -57,10 +57,24 @@ test('HTTP: zatwierdzenie, odrzucenie i zmiana ETA są zapisywane i ponownie oce
   let data = await response.json();
   assert.equal(data.orders[0].decision, 'approved');
   assert.ok(data.orders[0].decisionAt); assert.equal(data.orders[0].notification, null);
+  assert.equal(data.orders[0].status, 'at_risk'); assert.equal(data.orders[0].delayMinutes, 25);
+  assert.equal(data.orders[0].etaReliable, true);
   data = await (await patch('TR-002', { action: 'reject' })).json();
-  assert.equal(data.orders[1].decision, 'rejected'); assert.equal(data.orders[1].notification, null);
+  assert.equal(data.orders[1].decision, 'rejected');
+  assert.equal(data.orders[1].etaReliable, false);
+  assert.equal(data.orders[1].status, 'eta_update_required');
+  assert.equal(data.orders[1].delayMinutes, null);
+  assert.match(data.orders[1].notification.message, /Wymaga aktualizacji ETA/);
+  assert.equal((await patch('TR-002', { action: 'approve' })).status, 409);
   data = await (await fetch(base + '/api/delays')).json();
-  assert.equal(data.orders.filter(o => o.notification).length, 1);
+  assert.equal(data.orders.filter(o => o.notification).length, 2);
+  assert.equal(data.orders[1].status, 'eta_update_required');
+  data = await (await patch('TR-002', { action: 'reschedule', eta: '2026-11-02T14:30:00Z' })).json();
+  assert.equal(data.orders[1].decision, null);
+  assert.equal(data.orders[1].etaReliable, true);
+  assert.equal(data.orders[1].delayMinutes, 30);
+  assert.ok(data.orders[1].notification);
+  assert.equal((await patch('TR-002', { action: 'approve' })).status, 200);
   data = await (await patch('TR-003', { action: 'reschedule', eta: '2026-11-02T14:55:00Z' })).json();
   assert.equal(data.orders[2].status, 'on_time'); assert.equal(data.orders[2].notification, null);
   data = await (await patch('TR-001', { action: 'reschedule', eta: '2026-11-02T14:00:00Z' })).json();
@@ -68,4 +82,14 @@ test('HTTP: zatwierdzenie, odrzucenie i zmiana ETA są zapisywane i ponownie oce
   assert.equal((await patch('TR-001', { action: 'reschedule', eta: 'bad' })).status, 400);
   assert.equal((await patch('TR-001', { action: 'delete' })).status, 400);
   assert.equal((await patch('missing', { action: 'approve' })).status, 404);
+});
+
+
+test('odrzucona prognoza nigdy nie służy do obliczeń, także dla starszych zapisów', () => {
+  const result = evaluateDelay({ ...order, decision: 'rejected' }, 5);
+  assert.equal(result.etaReliable, false);
+  assert.equal(result.delayMinutes, null);
+  assert.equal(result.status, 'eta_update_required');
+  assert.ok(result.notification);
+  assert.equal(result.eta, order.eta);
 });

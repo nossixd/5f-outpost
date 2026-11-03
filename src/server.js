@@ -38,7 +38,8 @@ function createServer({ mode = 'demo', getOrders, store = createOrderStore(mode)
       res.writeHead(200, { 'Content-Type': asset[1], 'X-Content-Type-Options': 'nosniff', 'Cache-Control': 'no-store',
         'Content-Security-Policy': "default-src 'self'; object-src 'none'; base-uri 'none'; frame-ancestors 'none'" });
       res.end(body);
-    } catch {
+    } catch (error) {
+      if (error.statusCode === 409) return send(409, { error: error.message });
       send(503, { error: 'Nie udało się pobrać danych. Spróbuj ponownie.' });
     }
   });

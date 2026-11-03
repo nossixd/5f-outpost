@@ -1,6 +1,10 @@
 const byId = id => document.getElementById(id);
-const labels = { at_risk: 'Ryzyko opóźnienia', on_time: 'W terminie', missing_data: 'Brak wiarygodnych danych' };
-const decisions = { approved: 'Zatwierdzono opóźnienie', rejected: 'Odrzucono alert' };
+const labels = { at_risk: 'Ryzyko opóźnienia', on_time: 'W terminie', missing_data: 'Brak wiarygodnych danych', eta_update_required: 'Wymaga aktualizacji ETA' };
+function statusLabel(order) {
+  if (order.status === 'eta_update_required') return labels.eta_update_required;
+  if (order.decision === 'approved') return `Opóźnienie potwierdzone · ${minutes(order.delayMinutes)} min`;
+  return labels[order.status];
+}
 const date = value => value && Number.isFinite(Date.parse(value)) ? new Date(value).toLocaleString('pl-PL') : 'Brak danych';
 const minutes = value => new Intl.NumberFormat('pl-PL', { maximumFractionDigits: 2 }).format(value);
 let latestRequest = 0;
@@ -21,15 +25,17 @@ function closeDialogs() {
 }
 function actions(order) {
   const group = element('div', undefined, 'card-actions');
-  group.append(button('Zatwierdź', 'approve order-action', () => save(order.id, { action: 'approve' })),
-    button('Odrzuć', 'reject order-action', () => save(order.id, { action: 'reject' })),
-    button('Zmień czas', 'secondary order-action', () => editTime(order)));
+  if (order.status === 'at_risk' && !order.decision) {
+    group.append(button('Zatwierdź opóźnienie', 'approve order-action', () => save(order.id, { action: 'approve' })),
+      button('Odrzuć prognozę', 'reject order-action', () => save(order.id, { action: 'reject' })));
+  }
+  group.append(button('Zmień czas', 'secondary order-action', () => editTime(order)));
   return group;
 }
 function openDetails(order) {
   closeDialogs();
   const content = byId('detail-content'); content.replaceChildren();
-  for (const [label, value] of [['Zlecenie', order.id], ['Trasa', order.route], ['Planowana dostawa', date(order.plannedAt)], ['Przewidywany przyjazd (ETA)', date(order.eta)], ['Przewidywane opóźnienie', order.delayMinutes === null ? 'Brak danych' : `${minutes(order.delayMinutes)} min`]]) {
+  for (const [label, value] of [['Zlecenie', order.id], ['Trasa', order.route], ['Planowana dostawa', date(order.plannedAt)], [order.status === 'eta_update_required' ? 'Odrzucona prognoza ETA' : 'Przewidywany przyjazd (ETA)', date(order.eta)], ['Stan', statusLabel(order)], ['Przewidywane opóźnienie', order.delayMinutes === null ? 'Brak danych' : `${minutes(order.delayMinutes)} min`]]) {
     content.append(element('dt', label), element('dd', value));
   }
   byId('detail-actions').replaceChildren(actions(order));
@@ -46,12 +52,15 @@ function editTime(order) {
   byId('eta-dialog').showModal();
 }
 function alertCard(order) {
-  const card = element('article', undefined, 'alert-card');
+  const needsUpdate = order.status === 'eta_update_required';
+  const card = element('article', undefined, needsUpdate ? 'alert-card needs-update' : 'alert-card');
   const heading = element('div', undefined, 'card-heading');
   const text = element('div', undefined, 'alert-description');
   text.append(element('strong', order.id), element('p', order.route));
-  heading.append(text, element('span', `+${minutes(order.delayMinutes)} min`, 'delay-badge'));
-  const times = element('p', `Plan: ${date(order.plannedAt)} · ETA: ${date(order.eta)}`, 'card-times');
+  heading.append(text, element('span', needsUpdate ? 'Wymaga aktualizacji ETA' : `+${minutes(order.delayMinutes)} min`, needsUpdate ? 'update-badge' : 'delay-badge'));
+  const times = element('p', needsUpdate
+    ? `Prognoza została odrzucona. Podaj poprawny czas przyjazdu. Plan dostawy: ${date(order.plannedAt)}.`
+    : `Plan: ${date(order.plannedAt)} · ETA: ${date(order.eta)}`, 'card-times');
   const controls = actions(order);
   controls.append(button('Szczegóły', 'secondary alert', () => openDetails(order)));
   card.append(heading, times, controls);
@@ -62,8 +71,8 @@ function render(data) {
   for (const order of data.orders) {
     const row = document.createElement('tr');
     const name = element('td'); name.append(element('strong', order.id), element('small', order.route));
-    row.append(name, element('td', date(order.plannedAt)), element('td', order.etaReliable ? date(order.eta) : 'Brak wiarygodnego ETA'));
-    const status = element('td'); status.append(element('span', decisions[order.decision] || labels[order.status], `status-badge ${order.decision || order.status}`));
+    row.append(name, element('td', date(order.plannedAt)), element('td', order.status === 'eta_update_required' ? 'Prognoza odrzucona' : order.etaReliable ? date(order.eta) : 'Brak wiarygodnego ETA'));
+    const status = element('td'); status.append(element('span', statusLabel(order), `status-badge ${order.status === 'eta_update_required' ? order.status : order.decision || order.status}`));
     if (order.decisionAt) status.append(element('small', date(order.decisionAt)));
     const control = element('td'); control.append(button('Zmień czas', 'secondary order-action', () => editTime(order)));
     row.append(status, control); rows.push(row);

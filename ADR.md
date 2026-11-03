@@ -92,3 +92,19 @@ ocenę. Dane lokalne są w pamięci procesu; PostgreSQL przechowuje decyzje i ET
 
 Konsekwencje: Odświeżenie strony zachowuje zmiany; restart lokalnego procesu je resetuje.
 Przed aktualizacją PostgreSQL należy wykonać idempotentny schema.sql dodający kolumny.
+
+## ADR-008: Odrzucenie prognozy wymaga aktualizacji ETA
+
+Status: Przyjęty na wyraźne zlecenie użytkownika. Doprecyzowuje ADR-007:
+odrzucenie prognozy nie oznacza już jedynie wyciszenia alertu.
+
+Decyzja: Zatwierdzenie zachowuje wiarygodne ETA i potwierdzone opóźnienie w tabeli,
+obsługując powiadomienie. Odrzucenie ustawia eta_reliable=false i decyzję rejected.
+Ocena zwraca stan eta_update_required, bez obliczania opóźnienia, z powiadomieniem
+wymagającym nowego ETA. Stare ETA jest widoczne wyłącznie jako odrzucone w szczegółach.
+Nie można zatwierdzić niewiarygodnej prognozy przez API (HTTP 409). Edycja ETA czyści
+decyzję, przywraca wiarygodność ręcznie podanej prognozy i ponawia ocenę.
+
+Konsekwencje: Odrzucona dostawa pozostaje na liście uwagi do aktualizacji czasu.
+Zmiana nie kończy ani nie anuluje transportu. Istniejące rekordy rejected są traktowane
+jako niewiarygodne także wtedy, gdy starsza wersja nie zapisała eta_reliable=false.

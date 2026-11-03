@@ -5,10 +5,11 @@
 - Historia 2 ze slajdu 18: oznaczenie ryzyka, powiadomienie w aplikacji, szczegóły,
   komunikat o niewystarczających danych. Widok przeglądarkowy i API.
 - ADR-005–ADR-007 w ADR.md, specyfikacja i plan FR-02.
-- Trzy alerty startowe, zatwierdzanie/odrzucanie z datą decyzji i edycja ETA.
+- Trzy alerty startowe, zatwierdzenie opóźnienia, odrzucenie niewiarygodnej prognozy
+  z wymaganiem nowego ETA, daty decyzji i edycja ETA.
 - Opis 4+1 i źródła diagramów dla zaimplementowanej historii: UML Component,
   Communication, Sequence, ERD i DFD w `docs/architektura.md`.
-- Testy FR-02: 10/10 zaliczonych na Node.js 22.22.1 (logika, lokalny HTTP oraz zdarzenia interfejsu w symulowanym DOM).
+- Testy FR-02: 11/11 zaliczonych na Node.js 22.22.1 (logika, lokalny HTTP oraz zdarzenia interfejsu w symulowanym DOM).
 
 ## Czego jeszcze brakuje
 

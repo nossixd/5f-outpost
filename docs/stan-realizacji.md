@@ -4,10 +4,11 @@
 
 - Historia 2 ze slajdu 18: oznaczenie ryzyka, powiadomienie w aplikacji, szczegóły,
   komunikat o niewystarczających danych. Widok przeglądarkowy i API.
-- ADR-005 i ADR-006 w ADR.md, specyfikacja i plan FR-02.
+- ADR-005–ADR-007 w ADR.md, specyfikacja i plan FR-02.
+- Trzy alerty startowe, zatwierdzanie/odrzucanie z datą decyzji i edycja ETA.
 - Opis 4+1 i źródła diagramów dla zaimplementowanej historii: UML Component,
   Communication, Sequence, ERD i DFD w `docs/architektura.md`.
-- Testy FR-02: 9/9 zaliczonych na Node.js 22.22.1 (logika, lokalny HTTP oraz zdarzenia interfejsu w symulowanym DOM).
+- Testy FR-02: 10/10 zaliczonych na Node.js 22.22.1 (logika, lokalny HTTP oraz zdarzenia interfejsu w symulowanym DOM).
 
 ## Czego jeszcze brakuje
 
@@ -18,8 +19,8 @@ Do materiałów na ocenę:
   jeżeli prowadzący wymaga diagramów całej aplikacji, a nie zrealizowanego wycinka.
 - Uzgodnienia rozbieżności JavaScript (ADR i kod) / TypeScript (specyfikacja i konstytucja).
 - Próby adaptera na docelowej bazie PostgreSQL. Interfejs sprawdzono w bezgłowym
-  Firefoxie: alert przy progu 5, brak alertu przy 25, powrót przy 5, trwałe okno szczegółów
-  i brak zapadania układu podczas ponownej oceny.
+  Firefoxie: trzy alerty, zatwierdzenie, odrzucenie, edycja ETA, ponowna ocena,
+  zachowanie zmian po odświeżeniu i układ mobilny. Próg i etykietę danych usunięto z UI.
 - Przeglądu zespołowego dokumentacji i rzeczywistego udziału AI przed oddaniem.
 
 Do wdrożenia produkcyjnego (poza tą historią demonstracyjną):
@@ -31,7 +32,8 @@ Do wdrożenia produkcyjnego (poza tą historią demonstracyjną):
   Nie są wymagane do wykazania jednej historii na tę ocenę.
 
 Powiadomienia są wyliczane przy odczycie i prezentowane w aplikacji. Nie są wysyłane
-przez e-mail/push, nie mają historii ani automatycznego odświeżania w tle.
+przez e-mail/push i nie są automatycznie odświeżane w tle. Zapisywana jest ostatnia
+decyzja z datą, bez pełnej historii zmian. Stan lokalny żyje do restartu procesu.
 
 ## Wykorzystanie AI
 

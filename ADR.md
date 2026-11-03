@@ -76,3 +76,19 @@ nie jest zapisywany; odświeżenie zastępuje poprzedni zestaw powiadomień.
 
 Konsekwencje: Nie ma historii powiadomień ani dostarczania w tle. Dane ETA dostarcza
 adapter demonstracyjny lub tabela PostgreSQL; integracja telematyczna pozostaje do zrobienia.
+
+## ADR-007: Decyzje dyspozytora i ręczna korekta ETA
+
+Status: Przyjęty w rozszerzeniu zleconym przez użytkownika. Zastępuje interaktywny
+próg i ograniczenie do odczytu opisane w ADR-006.
+
+Kontekst: Użytkownik usuwa filtr progu i chce trzy alerty z akcjami Zatwierdź,
+Odrzuć i Zmień czas.
+
+Decyzja: Próg 5 minut pozostaje wewnętrzną regułą prototypu. Serwer obsługuje
+PATCH /api/orders/:id. Zatwierdzenie i odrzucenie zapisują decyzję z czasem, tłumiąc
+alert, bez zmiany planu lub statusu transportu. Korekta ETA resetuje decyzję i ponawia
+ocenę. Dane lokalne są w pamięci procesu; PostgreSQL przechowuje decyzje i ETA trwale.
+
+Konsekwencje: Odświeżenie strony zachowuje zmiany; restart lokalnego procesu je resetuje.
+Przed aktualizacją PostgreSQL należy wykonać idempotentny schema.sql dodający kolumny.

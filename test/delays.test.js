@@ -29,11 +29,8 @@ test('HTTP: demo, walidacja, statyczny widok, szczegóły i błędy', async t =>
   t.after(() => new Promise(resolve => server.close(resolve)));
   const base = `http://127.0.0.1:${server.address().port}`;
   const data = await (await fetch(`${base}/api/delays?threshold=5`)).json();
-  assert.equal(data.mode, 'demo'); assert.equal(data.orders[0].notification.orderId, 'TR-001');
-  assert.equal(data.orders[2].status, 'missing_data'); assert.equal(data.orders[3].status, 'missing_data');
-  const noAlerts = await (await fetch(`${base}/api/delays?threshold=25`)).json();
-  assert.equal(noAlerts.orders.filter(o => o.notification).length, 0);
-  for (const value of ['-1', '', 'abc', '1441']) assert.equal((await fetch(`${base}/api/delays?threshold=${value}`)).status, 400);
+  assert.equal(data.orders[0].notification.orderId, 'TR-001');
+  assert.equal(data.orders.filter(o => o.notification).length, 3); assert.equal(data.orders[3].status, 'missing_data');
   for (const asset of ['/', '/app.js', '/style.css']) assert.equal((await fetch(base + asset)).status, 200);
   assert.equal((await fetch(base + '/no-such-file')).status, 404);
   assert.equal((await fetch(base + '/api/delays', { method: 'POST' })).status, 405);
@@ -44,4 +41,31 @@ test('HTTP: awaria źródła jest jawna i nie ujawnia sekretów', async t => {
   t.after(() => new Promise(resolve => server.close(resolve)));
   const response = await fetch(`http://127.0.0.1:${server.address().port}/api/delays`);
   assert.equal(response.status, 503); assert.equal((await response.text()).includes('secret'), false);
+});
+
+
+test('HTTP: zatwierdzenie, odrzucenie i zmiana ETA są zapisywane i ponownie oceniane', async t => {
+  const server = createServer();
+  await new Promise(resolve => server.listen(0, '127.0.0.1', resolve));
+  t.after(() => new Promise(resolve => server.close(resolve)));
+  const base = `http://127.0.0.1:${server.address().port}`;
+  async function patch(id, body) {
+    return fetch(`${base}/api/orders/${id}`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+  }
+  let response = await patch('TR-001', { action: 'approve' });
+  assert.equal(response.status, 200);
+  let data = await response.json();
+  assert.equal(data.orders[0].decision, 'approved');
+  assert.ok(data.orders[0].decisionAt); assert.equal(data.orders[0].notification, null);
+  data = await (await patch('TR-002', { action: 'reject' })).json();
+  assert.equal(data.orders[1].decision, 'rejected'); assert.equal(data.orders[1].notification, null);
+  data = await (await fetch(base + '/api/delays')).json();
+  assert.equal(data.orders.filter(o => o.notification).length, 1);
+  data = await (await patch('TR-003', { action: 'reschedule', eta: '2026-11-02T14:55:00Z' })).json();
+  assert.equal(data.orders[2].status, 'on_time'); assert.equal(data.orders[2].notification, null);
+  data = await (await patch('TR-001', { action: 'reschedule', eta: '2026-11-02T14:00:00Z' })).json();
+  assert.equal(data.orders[0].decision, null); assert.ok(data.orders[0].notification);
+  assert.equal((await patch('TR-001', { action: 'reschedule', eta: 'bad' })).status, 400);
+  assert.equal((await patch('TR-001', { action: 'delete' })).status, 400);
+  assert.equal((await patch('missing', { action: 'approve' })).status, 404);
 });

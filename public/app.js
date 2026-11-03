@@ -1,61 +1,124 @@
 const byId = id => document.getElementById(id);
-const labels = { at_risk: 'Ryzyko opóźnienia', on_time: 'Bez przekroczenia progu', missing_data: 'Brak wystarczających danych' };
+const labels = { at_risk: 'Ryzyko opóźnienia', on_time: 'W terminie', missing_data: 'Brak wiarygodnych danych' };
+const decisions = { approved: 'Zatwierdzono opóźnienie', rejected: 'Odrzucono alert' };
 const date = value => value && Number.isFinite(Date.parse(value)) ? new Date(value).toLocaleString('pl-PL') : 'Brak danych';
-function element(tag, value) { const el = document.createElement(tag); el.textContent = value; return el; }
+const minutes = value => new Intl.NumberFormat('pl-PL', { maximumFractionDigits: 2 }).format(value);
+let latestRequest = 0;
+let saving = false;
+let editingOrder = null;
+function element(tag, value, className) {
+  const el = document.createElement(tag);
+  if (value !== undefined) el.textContent = value;
+  if (className) el.className = className;
+  return el;
+}
+function button(text, className, handler) {
+  const el = element('button', text, className); el.type = 'button';
+  el.addEventListener('click', handler); return el;
+}
+function closeDialogs() {
+  for (const id of ['notifications', 'details', 'eta-dialog']) if (byId(id).open) byId(id).close();
+}
+function actions(order) {
+  const group = element('div', undefined, 'card-actions');
+  group.append(button('Zatwierdź', 'approve order-action', () => save(order.id, { action: 'approve' })),
+    button('Odrzuć', 'reject order-action', () => save(order.id, { action: 'reject' })),
+    button('Zmień czas', 'secondary order-action', () => editTime(order)));
+  return group;
+}
 function openDetails(order) {
+  closeDialogs();
   const content = byId('detail-content'); content.replaceChildren();
-  for (const [label, value] of [['Zlecenie', order.id], ['Trasa', order.route], ['Planowana dostawa', date(order.plannedAt)], ['ETA', date(order.eta)], ['Opóźnienie', `${Math.round(order.delayMinutes * 100) / 100} min`]]) {
+  for (const [label, value] of [['Zlecenie', order.id], ['Trasa', order.route], ['Planowana dostawa', date(order.plannedAt)], ['Przewidywany przyjazd (ETA)', date(order.eta)], ['Przewidywane opóźnienie', order.delayMinutes === null ? 'Brak danych' : `${minutes(order.delayMinutes)} min`]]) {
     content.append(element('dt', label), element('dd', value));
   }
+  byId('detail-actions').replaceChildren(actions(order));
   byId('details').showModal();
 }
-let latestRequest = 0;
-async function refresh(event) {
-  event?.preventDefault();
-  const requestId = ++latestRequest;
-  byId('error').textContent = '';
-  const button = byId('filters').querySelector('button');
-  if (!byId('threshold').checkValidity()) {
-    button.disabled = false;
-    byId('evaluation-status').textContent = 'Wpisz próg od 0 do 1440 minut. Wyświetlane wyniki dotyczą poprzedniej oceny.';
-    return;
+function editTime(order) {
+  if (saving) return;
+  closeDialogs(); editingOrder = order;
+  byId('eta-order').textContent = `${order.id} · ${order.route}`;
+  const value = new Date(order.eta || order.plannedAt);
+  byId('eta-input').value = Number.isFinite(value.getTime())
+    ? new Date(value.getTime() - value.getTimezoneOffset() * 60000).toISOString().slice(0, 16) : '';
+  byId('eta-error').textContent = '';
+  byId('eta-dialog').showModal();
+}
+function alertCard(order) {
+  const card = element('article', undefined, 'alert-card');
+  const heading = element('div', undefined, 'card-heading');
+  const text = element('div', undefined, 'alert-description');
+  text.append(element('strong', order.id), element('p', order.route));
+  heading.append(text, element('span', `+${minutes(order.delayMinutes)} min`, 'delay-badge'));
+  const times = element('p', `Plan: ${date(order.plannedAt)} · ETA: ${date(order.eta)}`, 'card-times');
+  const controls = actions(order);
+  controls.append(button('Szczegóły', 'secondary alert', () => openDetails(order)));
+  card.append(heading, times, controls);
+  return card;
+}
+function render(data) {
+  const rows = [];
+  for (const order of data.orders) {
+    const row = document.createElement('tr');
+    const name = element('td'); name.append(element('strong', order.id), element('small', order.route));
+    row.append(name, element('td', date(order.plannedAt)), element('td', order.etaReliable ? date(order.eta) : 'Brak wiarygodnego ETA'));
+    const status = element('td'); status.append(element('span', decisions[order.decision] || labels[order.status], `status-badge ${order.decision || order.status}`));
+    if (order.decisionAt) status.append(element('small', date(order.decisionAt)));
+    const control = element('td'); control.append(button('Zmień czas', 'secondary order-action', () => editTime(order)));
+    row.append(status, control); rows.push(row);
   }
-  button.disabled = true;
-  byId('evaluation-status').textContent = 'Przeliczanie ryzyka…';
+  const risky = data.orders.filter(order => order.notification);
+  byId('notification-count').textContent = String(risky.length);
+  for (const id of ['alerts', 'notification-list']) {
+    const cards = risky.map(alertCard);
+    if (!cards.length) cards.push(element('p', 'Brak dostaw wymagających uwagi.', 'empty-state'));
+    byId(id).replaceChildren(...cards);
+  }
+  if (!rows.length) {
+    const row = document.createElement('tr'); const cell = element('td', 'Brak zleceń.'); cell.colSpan = 5; row.append(cell); rows.push(row);
+  }
+  byId('orders').replaceChildren(...rows);
+}
+async function refresh() {
+  if (saving) return;
+  const requestId = ++latestRequest;
+  byId('error').textContent = ''; byId('refresh').disabled = true;
   try {
-    const response = await fetch(`/api/delays?threshold=${encodeURIComponent(byId('threshold').value)}`);
-    const data = await response.json();
+    const response = await fetch('/api/delays'); const data = await response.json();
     if (requestId !== latestRequest) return;
     if (!response.ok) throw new Error(data.error);
-    byId('source').textContent = data.mode === 'demo' ? 'Tryb demonstracyjny — przykładowe, stałe dane z 02.11.2026. Bez połączenia z systemem ETA.' : 'Źródło: PostgreSQL. Ocena na podstawie zapisanych danych ETA.';
-    const rows = [];
-    const alerts = [];
-    for (const order of data.orders) {
-      const row = document.createElement('tr');
-      row.append(element('td', `${order.id} · ${order.route}`), element('td', date(order.plannedAt)), element('td', order.etaReliable ? date(order.eta) : 'Brak wiarygodnego ETA'));
-      const status = element('td', labels[order.status]); status.className = order.status; row.append(status); rows.push(row);
-      if (order.notification) {
-        const alert = element('button', `${order.notification.message} — szczegóły`);
-        alert.type = 'button';
-        alert.className = 'alert'; alert.addEventListener('click', event => { event.preventDefault(); openDetails(order); }); alerts.push(alert);
-      }
-    }
-    const count = data.orders.filter(order => order.notification).length;
-    byId('evaluation-status').textContent = `Oceniono dla progu ${data.thresholdMinutes} min. Liczba alertów: ${count}.`;
-    if (!alerts.length) alerts.push(element('p', 'Brak powiadomień o przekroczeniu progu. Sprawdź również zlecenia bez danych.'));
-    if (!rows.length) {
-      const row = document.createElement('tr');
-      const cell = element('td', 'Brak zleceń.'); cell.colSpan = 4; row.append(cell); rows.push(row);
-    }
-    byId('alerts').replaceChildren(...alerts);
-    byId('orders').replaceChildren(...rows);
+    render(data);
   } catch (error) {
-    if (requestId !== latestRequest) return;
-    byId('evaluation-status').textContent = 'Ocena nie powiodła się. Poprzednie wyniki są nieaktualne.';
-    byId('error').textContent = error.message || 'Błąd pobierania danych.';
-    byId('source').textContent = 'Dane niedostępne — ocena nie została wykonana.';
-  } finally { if (requestId === latestRequest) button.disabled = false; }
+    if (requestId === latestRequest) byId('error').textContent = error.message || 'Nie udało się pobrać danych.';
+  } finally { if (requestId === latestRequest) byId('refresh').disabled = false; }
 }
-byId('filters').addEventListener('submit', refresh);
-byId('threshold').addEventListener('input', refresh);
+async function save(id, command) {
+  if (saving) return;
+  saving = true; ++latestRequest;
+  byId('error').textContent = ''; byId('eta-error').textContent = ''; byId('detail-error').textContent = '';
+  const controls = document.querySelectorAll('button'); controls.forEach(control => { control.disabled = true; });
+  try {
+    const response = await fetch(`/api/orders/${encodeURIComponent(id)}`, {
+      method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(command),
+    });
+    const data = await response.json();
+    if (!response.ok) throw new Error(data.error);
+    closeDialogs(); render(data);
+  } catch (error) {
+    const message = error.message || 'Nie udało się zapisać zmiany. Spróbuj ponownie.';
+    byId('error').textContent = message; byId('eta-error').textContent = message; byId('detail-error').textContent = message;
+  } finally { saving = false; controls.forEach(control => { control.disabled = false; }); byId('refresh').disabled = false; }
+}
+byId('open-notifications').addEventListener('click', () => byId('notifications').showModal());
+byId('refresh').addEventListener('click', refresh);
+byId('eta-cancel').addEventListener('click', closeDialogs);
+byId('eta-form').addEventListener('submit', event => {
+  event.preventDefault();
+  const value = new Date(byId('eta-input').value);
+  if (!byId('eta-input').checkValidity() || !Number.isFinite(value.getTime())) {
+    byId('eta-error').textContent = 'Podaj prawidłowy czas przyjazdu.'; return;
+  }
+  save(editingOrder.id, { action: 'reschedule', eta: value.toISOString() });
+});
 refresh();

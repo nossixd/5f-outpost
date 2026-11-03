@@ -1,20 +1,26 @@
 # FR-02 — Historia 2: informowanie o opóźnieniu
 
-Źródło: prezentacja, slajdy 12, 18 i 22; istniejąca specyfikacja FR-02.
-Zakres autoryzowany przez użytkownika: jedna historia z prezentacji.
+Źródło: prezentacja, slajdy 12, 18 i 22; specyfikacja FR-02.
+Rozszerzenie zatwierdzone przez użytkownika: trzy dostawy wymagające uwagi,
+zatwierdzanie/odrzucanie alertu, edycja czasu i usunięcie formularza progu.
 
 ## Kryteria akceptacji
 
-1. Gdy wiarygodne ETA przekracza plan dostawy o więcej niż ustawiony próg,
-   zlecenie otrzymuje oznaczenie ryzyka i powiadomienie w aplikacji.
-2. Otwarcie powiadomienia pokazuje numer zlecenia, plan, ETA i opóźnienie.
-3. Brak planu, ETA lub wiarygodności ETA daje informację o niewystarczających danych,
-   bez zgadywania opóźnienia i bez alertu.
+1. Dla wiarygodnego ETA przekraczającego plan dostawy o ponad 5 minut powstaje alert.
+   Pięć minut to wewnętrzny parametr prototypu, wymagający zatwierdzenia produkcyjnego.
+   Nie ma filtra ani ustawienia progu w interfejsie.
+2. Lista startowa zawiera TR-001 (+25 min), TR-002 (+40 min), TR-003 (+15 min).
+3. Górne Powiadomienia otwierają okno z listą. Szczegóły pokazują plan, ETA i opóźnienie.
+4. Zatwierdź zapisuje decyzję o przyjęciu opóźnienia; Odrzuć odrzuca alert.
+   Obie akcje usuwają alert z listy uwagi i zapisują decyzję oraz czas w tabeli zleceń.
+   Żadna z akcji nie anuluje ani nie kończy transportu i nie zmienia jego czasu dostawy.
+5. Zmień czas otwiera formularz ETA. Zapis zmienia ETA, oznacza ręczny odczyt jako
+   wiarygodny, czyści wcześniejszą decyzję i ponownie ocenia ryzyko. Plan dostawy pozostaje bez zmian.
+6. Decyzje i ETA są zapisywane po stronie serwera i zachowane po odświeżeniu strony.
+   W trybie lokalnym dane są w pamięci procesu (restart przywraca listę początkową).
+   W trybie PostgreSQL dane są trwałe.
+7. Brak planu, ETA lub wiarygodności daje komunikat o braku danych bez alertu.
+8. Nieudany zapis nie usuwa alertu i pokazuje błąd z możliwością ponowienia.
 
-Próg nie jest ustalony w prezentacji: w prototypie jest jawnym parametrem formularza
-(5 minut na starcie demonstracji), a nie zatwierdzoną regułą biznesową.
-Równość progu nie oznacza jego przekroczenia. Jedno powiadomienie na zlecenie w bieżącej
-ocenie; ponowne odświeżenie nie dodaje duplikatów.
-
-Dane demonstracyjne zastępują zewnętrzny system ETA. Produkcyjny próg, zasady wiarygodności
-ETA i sposób uwierzytelnienia wymagają doprecyzowania przed wdrożeniem.
+Dostawca ETA, produkcyjny próg, polityka uprawnień i zasady wiarygodności danych
+pozostają do uzgodnienia przed wdrożeniem.

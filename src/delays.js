@@ -14,8 +14,8 @@ function evaluateDelay(order, thresholdMinutes) {
   const atRisk = enoughData && delayMinutes > thresholdMinutes;
   return {
     ...order, delayMinutes, status: !enoughData ? 'missing_data' : atRisk ? 'at_risk' : 'on_time',
-    notification: atRisk ? { id: `delay-${order.id}`, orderId: order.id,
+    notification: atRisk && !order.decision ? { id: `delay-${order.id}`, orderId: order.id,
       message: `Ryzyko opóźnienia: ${order.id}` } : null,
   };
 }
-module.exports = { evaluateDelay };
+module.exports = { evaluateDelay, timestamp };

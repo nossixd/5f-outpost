@@ -6,6 +6,12 @@ Wymagania ogólne: `specs/001-transport-dispatch/spec.md` i diagramy przypadków
 w `docs/`. Implementowana historia: slajd 18 oraz `specs/002-delay-alerts/spec.md`.
 Dokument przedstawia wyłącznie zaimplementowany wycinek systemu.
 
+Aktualizacja: ADR-007 rozszerza historię o decyzje i ręczną zmianę ETA. Próg 5 minut
+jest regułą serwera, bez ustawienia w przeglądarce. PATCH /api/orders/:id przyjmuje
+action (approve/reject/reschedule) i opcjonalne eta. Magazyn zapisuje decyzję i czas
+lub aktualizuje ETA oraz czyści poprzednią decyzję. Następuje ponowna ocena
+i zwrot aktualnej listy. Lokalny magazyn jest w pamięci procesu; PostgreSQL jest trwały.
+
 ## Widok deweloperski: struktura
 
 Moduły: przeglądarka (`public/`), serwer HTTP (`src/server.js`), logika oceny
@@ -25,7 +31,7 @@ Dyspozytor --> UI
 UI --> API : GET /api/delays
 API --> Risk : evaluateDelay
 API --> Adapter : loadOrders
-Adapter --> DB : SELECT
+Adapter --> DB : SELECT / UPDATE
 Adapter --> Demo : tryb demo
 @enduml
 ```
@@ -39,8 +45,8 @@ participant "Przeglądarka" as UI
 participant "Serwer HTTP" as API
 participant "Adapter danych" as Data
 participant "Ocena ryzyka" as Risk
-Dyspozytor -> UI : Oceń ryzyko (próg)
-UI -> API : GET /api/delays?threshold=5
+Dyspozytor -> UI : Odśwież dane
+UI -> API : GET /api/delays
 API -> Data : loadOrders()
 Data --> API : zlecenia z planem i ETA
 loop każde zlecenie
@@ -64,7 +70,7 @@ object "widok : Przeglądarka" as UI
 object "api : SerwerHTTP" as API
 object "źródło : AdapterDanych" as Data
 object "ocena : OcenaRyzyka" as Risk
-User --> UI : 1: oceń(próg)
+User --> UI : 1: odśwież()
 UI --> API : 1.1: GET /api/delays
 API --> Data : 1.2: loadOrders()
 Data --> API : 1.3: zlecenia
@@ -89,6 +95,8 @@ erDiagram
         timestamptz planned_at "opcjonalny"
         timestamptz eta "opcjonalne"
         boolean eta_reliable
+        text decision "approved / rejected / NULL"
+        timestamptz decision_at "opcjonalny"
     }
 ```
 
@@ -96,7 +104,7 @@ erDiagram
 
 ```mermaid
 flowchart LR
-    U[Dyspozytor] -->|próg oceny| P1((1. Pobranie zleceń))
+    U[Dyspozytor] -->|żądanie odczytu| P1((1. Pobranie zleceń))
     D[(PostgreSQL lub zbiór demo)] -->|plan, ETA, wiarygodność| P1
     P1 -->|zlecenia i próg| P2((2. Ocena ryzyka))
     P2 -->|status, opóźnienie, powiadomienia| P3((3. Prezentacja))
@@ -109,3 +117,27 @@ flowchart LR
 Lokalna przeglądarka komunikuje się z jednym procesem Node.js na 127.0.0.1:3000.
 Opcjonalnie proces łączy się z PostgreSQL. Nie skonfigurowano środowiska produkcyjnego,
 reverse proxy, TLS ani zewnętrznego dostawcy ETA.
+
+
+## Aktualizacja procesu: decyzja lub zmiana czasu
+
+```plantuml
+@startuml
+actor Dyspozytor
+participant "Przeglądarka" as UI
+participant "Serwer HTTP" as API
+participant "Magazyn zleceń" as Store
+participant "Ocena ryzyka" as Risk
+Dyspozytor -> UI : Zatwierdź / Odrzuć / Zapisz czas
+UI -> API : PATCH /api/orders/:id (JSON)
+API -> API : walidacja akcji i ETA
+API -> Store : update(id, action, eta)
+Store --> API : zapisano / brak zlecenia
+API -> Store : list()
+Store --> API : aktualne dane
+API -> Risk : evaluateDelay(zlecenia, 5)
+Risk --> API : ocena i aktywne alerty
+API --> UI : JSON / błąd
+UI --> Dyspozytor : odświeżona lista i tabela / komunikat błędu
+@enduml
+```

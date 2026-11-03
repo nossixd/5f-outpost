@@ -1,36 +1,26 @@
-# Pokaz historii 2 — informowanie o ryzyku opóźnienia
+# Pokaz historii 2 — ryzyko opóźnienia
 
-Uruchom `npm start` i otwórz http://127.0.0.1:3000.
-Wygląd działającego widoku dopasowano do eksportu z folderu `strona/`:
-ciemne tło, lewy panel OUTPOST / TRANS-LOGIC, aktywne „Monitorowanie tras”,
-górny pasek oraz niebieskie akcenty. Pozostałe pozycje menu są opisami zakresu
-projektu; nie uruchamiają innych historii. Profil jest demonstracyjny.
+Uruchom `npm start`, otwórz http://127.0.0.1:3000.
 
-## Wypowiedź podczas pokazu
+„Prezentuję historię dyspozytora, który otrzymuje informacje o opóźnieniach,
+aby wcześniej reagować na problemy z dostawą.
 
-„Prezentuję historię dyspozytora, który chce otrzymywać informacje o ryzyku
-opóźnienia, aby wcześniej reagować i planować działania.
+W sekcji Dostawy wymagające uwagi widzimy trzy zlecenia. Każda karta pokazuje
+trasę, planowaną dostawę, ETA i opóźnienie. Górne Powiadomienia otwierają tę samą
+listę w oknie. Szczegóły pokazują komplet informacji o wybranej dostawie.
 
-Po lewej widzimy panel OUTPOST z zaznaczonym monitorowaniem tras. W głównym
-obszarze znajduje się widok ryzyka opóźnień: ustawienie progu, powiadomienia
-oraz tabela zleceń. Niebieski komunikat informuje, że korzystamy z danych demonstracyjnych.
+Przy TR-001 wybieram Zatwierdź. To oznacza przyjęcie informacji o opóźnieniu.
+Alert znika z listy uwagi, a w tabeli zostaje decyzja z datą.
 
-Próg ustawiam na 5 minut; ocena przelicza się automatycznie. System porównuje przewidywany czas przyjazdu, czyli ETA,
-z planowaną dostawą. Dla TR-001 plan to 14:00, a ETA to 14:25, więc opóźnienie
-wynosi 25 minut. Jest większe od progu, dlatego zlecenie ma oznaczenie ryzyka,
-a nad tabelą pojawia się powiadomienie.
+Przy TR-002 wybieram Odrzuć. Odrzucam alert, nie anuluję transportu.
+Decyzja również jest zapisana w tabeli.
 
-Klikam powiadomienie. Otwiera się okno ze szczegółami: numerem zlecenia, trasą,
-planowanym czasem, ETA i opóźnieniem. Dyspozytor ma informacje potrzebne do podjęcia działania.
+Przy TR-003 wybieram Zmień czas. Wpisuję nowy przewidywany czas przyjazdu,
+np. 02.11.2026 o 15:55, i zapisuję. System ponownie porównuje ETA z planem 16:00.
+Ponieważ dostawa nie jest już opóźniona, znika z listy uwagi. Nowe ETA widać w tabeli.
 
-W tabeli widzimy też TR-002, które nie przekracza progu. TR-003 nie ma ETA,
-a TR-004 ma niewiarygodne ETA. W tych przypadkach system informuje o braku
-wystarczających danych i nie zgaduje opóźnienia.
+Po odświeżeniu strony decyzje i zmieniony czas są nadal widoczne.”
 
-Na koniec zmieniam próg na 25 minut i wynik automatycznie się aktualizuje (można też kliknąć Oceń ryzyko). Alert TR-001 znika,
-ponieważ opóźnienie jest równe progowi, a reguła wymaga jego przekroczenia.
-W ten sposób pokazujemy wszystkie trzy kryteria historii: wykrycie ryzyka,
-podgląd szczegółów i obsługę brakujących danych.”
-
-Godziny wyświetlane są w strefie czasowej przeglądarki; powyższy przykład zakłada Europe/Warsaw.
-Nie prezentujemy mapy GPS ani automatycznych powiadomień w tle — nie są zaimplementowane.
+Godziny powyżej zakładają strefę Europe/Warsaw. Po restarcie serwera w trybie lokalnym
+wracają początkowe trzy alerty. W PostgreSQL zmiany są trwałe. Makiety pozostałych
+modułów nie są działającymi historiami. System nadal nie pobiera ETA z telematyki.

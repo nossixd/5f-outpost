@@ -7,7 +7,7 @@
 - ADR-005 i ADR-006 w ADR.md, specyfikacja i plan FR-02.
 - Opis 4+1 i źródła diagramów dla zaimplementowanej historii: UML Component,
   Communication, Sequence, ERD i DFD w `docs/architektura.md`.
-- Testy FR-02: 6/6 zaliczonych na Node.js 22.16.0 (logika oraz lokalny HTTP).
+- Testy FR-02: 8/8 zaliczonych na Node.js 22.22.1 (logika, lokalny HTTP oraz zdarzenia interfejsu w symulowanym DOM).
 
 ## Czego jeszcze brakuje
 

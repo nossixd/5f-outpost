@@ -14,11 +14,10 @@ async function refresh(event) {
   event?.preventDefault();
   const requestId = ++latestRequest;
   byId('error').textContent = '';
-  byId('alerts').replaceChildren(); byId('orders').replaceChildren();
   const button = byId('filters').querySelector('button');
   if (!byId('threshold').checkValidity()) {
     button.disabled = false;
-    byId('evaluation-status').textContent = 'Wpisz próg od 0 do 1440 minut, aby ocenić ryzyko.';
+    byId('evaluation-status').textContent = 'Wpisz próg od 0 do 1440 minut. Wyświetlane wyniki dotyczą poprzedniej oceny.';
     return;
   }
   button.disabled = true;
@@ -29,22 +28,30 @@ async function refresh(event) {
     if (requestId !== latestRequest) return;
     if (!response.ok) throw new Error(data.error);
     byId('source').textContent = data.mode === 'demo' ? 'Tryb demonstracyjny — przykładowe, stałe dane z 02.11.2026. Bez połączenia z systemem ETA.' : 'Źródło: PostgreSQL. Ocena na podstawie zapisanych danych ETA.';
+    const rows = [];
+    const alerts = [];
     for (const order of data.orders) {
       const row = document.createElement('tr');
       row.append(element('td', `${order.id} · ${order.route}`), element('td', date(order.plannedAt)), element('td', order.etaReliable ? date(order.eta) : 'Brak wiarygodnego ETA'));
-      const status = element('td', labels[order.status]); status.className = order.status; row.append(status); byId('orders').append(row);
+      const status = element('td', labels[order.status]); status.className = order.status; row.append(status); rows.push(row);
       if (order.notification) {
         const alert = element('button', `${order.notification.message} — szczegóły`);
-        alert.className = 'alert'; alert.addEventListener('click', () => openDetails(order)); byId('alerts').append(alert);
+        alert.type = 'button';
+        alert.className = 'alert'; alert.addEventListener('click', event => { event.preventDefault(); openDetails(order); }); alerts.push(alert);
       }
     }
     const count = data.orders.filter(order => order.notification).length;
     byId('evaluation-status').textContent = `Oceniono dla progu ${data.thresholdMinutes} min. Liczba alertów: ${count}.`;
-    if (!byId('alerts').children.length) byId('alerts').append(element('p', 'Brak powiadomień o przekroczeniu progu. Sprawdź również zlecenia bez danych.'));
-    if (!data.orders.length) byId('orders').append(element('tr', 'Brak zleceń.'));
+    if (!alerts.length) alerts.push(element('p', 'Brak powiadomień o przekroczeniu progu. Sprawdź również zlecenia bez danych.'));
+    if (!rows.length) {
+      const row = document.createElement('tr');
+      const cell = element('td', 'Brak zleceń.'); cell.colSpan = 4; row.append(cell); rows.push(row);
+    }
+    byId('alerts').replaceChildren(...alerts);
+    byId('orders').replaceChildren(...rows);
   } catch (error) {
     if (requestId !== latestRequest) return;
-    byId('evaluation-status').textContent = 'Ocena nie powiodła się.';
+    byId('evaluation-status').textContent = 'Ocena nie powiodła się. Poprzednie wyniki są nieaktualne.';
     byId('error').textContent = error.message || 'Błąd pobierania danych.';
     byId('source').textContent = 'Dane niedostępne — ocena nie została wykonana.';
   } finally { if (requestId === latestRequest) button.disabled = false; }

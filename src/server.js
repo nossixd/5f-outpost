@@ -24,7 +24,7 @@ function createServer({ mode = 'demo', getOrders = () => loadOrders(mode) } = {}
       const asset = assets[url.pathname];
       if (!asset) return send(404, { error: 'Nie znaleziono zasobu.' });
       const body = await readFile(path.join(__dirname, '../public', asset[0]));
-      res.writeHead(200, { 'Content-Type': asset[1], 'X-Content-Type-Options': 'nosniff',
+      res.writeHead(200, { 'Content-Type': asset[1], 'X-Content-Type-Options': 'nosniff', 'Cache-Control': 'no-store',
         'Content-Security-Policy': "default-src 'self'; object-src 'none'; base-uri 'none'; frame-ancestors 'none'" });
       res.end(body);
     } catch {

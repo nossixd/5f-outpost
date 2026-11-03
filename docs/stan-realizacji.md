@@ -7,7 +7,7 @@
 - ADR-005 i ADR-006 w ADR.md, specyfikacja i plan FR-02.
 - Opis 4+1 i źródła diagramów dla zaimplementowanej historii: UML Component,
   Communication, Sequence, ERD i DFD w `docs/architektura.md`.
-- Testy FR-02: 8/8 zaliczonych na Node.js 22.22.1 (logika, lokalny HTTP oraz zdarzenia interfejsu w symulowanym DOM).
+- Testy FR-02: 9/9 zaliczonych na Node.js 22.22.1 (logika, lokalny HTTP oraz zdarzenia interfejsu w symulowanym DOM).
 
 ## Czego jeszcze brakuje
 
@@ -17,8 +17,9 @@ Do materiałów na ocenę:
 - Rozszerzenia projektu architektury i modelu danych na cały zakres FR-01–FR-04,
   jeżeli prowadzący wymaga diagramów całej aplikacji, a nie zrealizowanego wycinka.
 - Uzgodnienia rozbieżności JavaScript (ADR i kod) / TypeScript (specyfikacja i konstytucja).
-- Weryfikacji interfejsu w prawdziwej przeglądarce i próby na docelowej bazie PostgreSQL.
-  Te kontrole nie zostały wykonane; testy API ich nie zastępują.
+- Próby adaptera na docelowej bazie PostgreSQL. Interfejs sprawdzono w bezgłowym
+  Firefoxie: alert przy progu 5, brak alertu przy 25, powrót przy 5, trwałe okno szczegółów
+  i brak zapadania układu podczas ponownej oceny.
 - Przeglądu zespołowego dokumentacji i rzeczywistego udziału AI przed oddaniem.
 
 Do wdrożenia produkcyjnego (poza tą historią demonstracyjną):

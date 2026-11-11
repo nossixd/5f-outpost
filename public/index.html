@@ -1,0 +1,20 @@
+<!doctype html>
+<html lang="pl">
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>OUTPOST · Ryzyko opóźnień</title><link rel="stylesheet" href="/style.css"><script src="/app.js" defer></script></head>
+<body>
+<aside class="sidebar" aria-label="Panel nawigacji">
+  <div class="brand"><span class="brand-symbol" aria-hidden="true">◈</span><div><strong>OUTPOST</strong><small>TRANS-LOGIC</small></div></div>
+  <p class="menu-label">OBSZAR OPERACYJNY</p>
+  <nav aria-label="Obszar operacyjny"><a class="active" href="/" aria-current="page">Monitorowanie tras</a><span>Zlecenia</span><span>Zgłoszenia</span><span>Raporty i Koszty</span><span>Ustawienia</span></nav>
+  <div class="profile"><span class="avatar" aria-hidden="true">JK</span><div><strong>Jan Kowalski</strong><small>Dyspozytor · profil demo</small></div></div>
+</aside>
+<div class="workspace"><header><span>Panel dyspozytora <span class="breadcrumb-separator">›</span> <strong>Monitorowanie tras</strong></span><button id="open-notifications" class="notifications-link" type="button" aria-haspopup="dialog">Powiadomienia <span id="notification-count">0</span></button></header><main>
+<p class="eyebrow">MONITOROWANIE TRAS</p>
+<h1>Ryzyko opóźnień</h1><p>Sprawdź opóźnienia, podejmij decyzję lub zaktualizuj przewidywany czas przyjazdu.</p>
+<div class="page-actions"><button id="refresh" class="secondary" type="button">Odśwież dane</button></div>
+<p id="error" role="alert"></p><section aria-labelledby="alerts-title"><h2 id="alerts-title">Dostawy wymagające uwagi</h2><div id="alerts" aria-live="polite"></div></section>
+<section aria-labelledby="orders-title"><h2 id="orders-title">Zlecenia</h2><div class="scroll"><table><thead><tr><th>Zlecenie / trasa</th><th>Planowana dostawa</th><th>ETA</th><th>Ocena / decyzja</th><th>Akcje</th></tr></thead><tbody id="orders"></tbody></table></div></section>
+<dialog id="notifications" aria-labelledby="notifications-title"><h2 id="notifications-title">Powiadomienia</h2><div id="notification-list"></div><form method="dialog"><button class="secondary">Zamknij</button></form></dialog>
+<dialog id="details" aria-labelledby="detail-title"><h2 id="detail-title">Szczegóły opóźnienia</h2><dl id="detail-content"></dl><p id="detail-error" role="alert"></p><div id="detail-actions" class="card-actions"></div><form method="dialog"><button>Zamknij</button></form></dialog>
+<dialog id="eta-dialog" aria-labelledby="eta-title"><h2 id="eta-title">Zmień czas przyjazdu</h2><p id="eta-order"></p><form id="eta-form"><label for="eta-input">Nowy przewidywany przyjazd (ETA)</label><input id="eta-input" type="datetime-local" required><p id="eta-error" role="alert"></p><div class="card-actions"><button type="submit">Zapisz czas</button><button id="eta-cancel" class="secondary" type="button">Anuluj</button></div></form></dialog>
+</main></div></body></html>

@@ -31,7 +31,9 @@ test('HTTP: demo, walidacja, statyczny widok, szczegóły i błędy', async t =>
   const data = await (await fetch(`${base}/api/delays?threshold=5`)).json();
   assert.equal(data.orders[0].notification.orderId, 'TR-001');
   assert.equal(data.orders.filter(o => o.notification).length, 3); assert.equal(data.orders[3].status, 'missing_data');
-  for (const asset of ['/', '/app.js', '/style.css']) assert.equal((await fetch(base + asset)).status, 200);
+  for (const asset of ['/', '/app.js', '/fleet.js', '/style.css']) assert.equal((await fetch(base + asset)).status, 200);
+  const page = await fetch(base);
+  assert.match(page.headers.get('Content-Security-Policy'), /maps\.googleapis\.com/);
   assert.equal((await fetch(base + '/no-such-file')).status, 404);
   assert.equal((await fetch(base + '/api/delays', { method: 'POST' })).status, 405);
 });

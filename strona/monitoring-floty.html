@@ -1,0 +1,48 @@
+<!doctype html>
+<html lang="pl">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>OUTPOST · Monitoring floty</title>
+  <link rel="stylesheet" href="/style.css">
+  <script src="/fleet.js" defer></script>
+</head>
+<body>
+<aside class="sidebar" aria-label="Panel nawigacji">
+  <div class="brand"><span class="brand-symbol" aria-hidden="true">◈</span><div><strong>OUTPOST</strong><small>TRANS-LOGIC</small></div></div>
+  <p class="menu-label">OBSZAR OPERACYJNY</p>
+  <nav aria-label="Obszar operacyjny"><a id="delays-tab" href="/">Monitorowanie tras</a><a id="fleet-tab" class="active" href="/monitoring-floty.html" aria-current="page">Monitoring floty</a><span>Zlecenia</span><span>Zgłoszenia</span><span>Raporty i Koszty</span><span>Ustawienia</span></nav>
+  <div class="profile"><span class="avatar" aria-hidden="true">JK</span><div><strong>Jan Kowalski</strong><small>Dyspozytor · profil demo</small></div></div>
+</aside>
+<div class="workspace"><header><span>Panel dyspozytora <span class="breadcrumb-separator">›</span> <strong id="page-title">Monitoring floty</strong></span></header><main>
+<section id="fleet-view" aria-labelledby="fleet-heading">
+  <p class="eyebrow">MONITOROWANIE TRANSPORTÓW</p>
+  <h1 id="fleet-heading">Monitoring floty</h1>
+  <p>Sprawdź pozycje pojazdów i ich bieżące zlecenia.</p>
+  <div class="page-actions"><span id="fleet-count" aria-live="polite"></span><button id="fleet-refresh" class="secondary" type="button">Odśwież pozycje</button></div>
+  <p id="fleet-error" role="alert"></p>
+  <div class="fleet-layout">
+    <div class="fleet-sidebar">
+      <section aria-labelledby="fleet-list-title">
+        <h2 id="fleet-list-title">Pojazdy i bieżące zlecenia</h2>
+        <div id="fleet-vehicles" class="fleet-vehicle-list" aria-live="polite"></div>
+      </section>
+      <section id="fleet-details" aria-labelledby="fleet-details-title" hidden>
+        <h2 id="fleet-details-title">Szczegóły pojazdu</h2>
+        <div id="fleet-details-content"></div>
+        <button id="fleet-road-route" class="secondary" type="button" hidden>Wyznacz trasę po drogach</button>
+        <p id="fleet-road-status" role="status" aria-live="polite"></p>
+      </section>
+    </div>
+    <div class="fleet-map-panel">
+      <div class="fleet-map-toolbar">
+        <p id="fleet-map-status" role="status" aria-live="polite"></p>
+        <button id="fleet-show-all" class="secondary" type="button">Wszystkie pojazdy</button>
+      </div>
+      <div id="fleet-map" class="fleet-map" role="application" aria-label="Mapa pojazdów i tras">Mapa wymaga danych z PostgreSQL.</div>
+    </div>
+  </div>
+</section>
+</main></div>
+</body>
+</html>

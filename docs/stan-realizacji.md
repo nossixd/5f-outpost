@@ -1,7 +1,53 @@
 # Stan realizacji względem „Zajęcia 5 — Ocena 2”
 
+## Historia 3 — zakończenie transportu (FR-01)
+
+- Zaimplementowano wybór istniejącego zlecenia, podgląd statusu realizacji, przycisk
+  zakończenia z potwierdzeniem oraz prezentację statusu i czasu zakończenia.
+- Dodano `PATCH /api/orders/:id/complete`; nie przyjmuje tożsamości z przeglądarki.
+  Demo jest ograniczone do połączeń lokalnych. PostgreSQL domyślnie odmawia operacji;
+  jawny tryb demonstracyjny jest lokalny i nie zastępuje logowania.
+- Dodano warunkowy atomowy zapis statusu i `completed_at`, migrację zachowującą dane,
+  konflikt ponownego/równoczesnego zakończenia i odpowiedzi 400/403/404/409/503.
+- Historia 3 realizuje zakończenie zlecenia transportowego w ramach FR-01, a nie
+  obsługę zgłoszeń FR-03.
+- Zakończenie jest objęte pełnym zestawem testów automatycznych. Test trwałości po
+  restarcie wymaga `TEST_DATABASE_URL`; bieżące połączenie z `outpost_db` sprawdzono
+  wyłącznie zapytaniami odczytującymi.
+
+## Monitorowanie floty — FR-01
+
+- Dodano widok „Monitoring floty”, API `GET /api/vehicles`, adapter PostgreSQL,
+  zapytanie łączące pojazdy, trasy, lokalizacje i istniejące zlecenia oraz ocenę ETA
+  przez FR-02.
+- Migracja 004 tworzy trzy tabele i pięć symulowanych pojazdów z adresem, GPS,
+  prędkością, trasą wielopunktową i powiązanym zleceniem; nie usuwa ani nie nadpisuje
+  istniejących danych. Wiek lokalizacji powyżej 30 sekund jest sygnalizowany.
+- Mapa używa `AdvancedMarkerElement`/`PinElement`, utrzymuje markery przy odświeżaniu,
+  dopasowuje widok do floty i obsługuje podgląd/wybór tras. Klucz Maps jest z
+  `GOOGLE_MAPS_API_KEY`; bez niego lista działa z komunikatem o konfiguracji.
+- Uproszczone geometrie z PostgreSQL są opisane jako poglądowe. Opcjonalne Routes API
+  wymaga osobnego `GOOGLE_ROUTES_API_KEY`, jest uruchamiane wyłącznie ręcznie po
+  potwierdzeniu kosztu i nie zapisuje wyniku do bazy.
+- Testy nowych i istniejących funkcji: **26 zaliczonych, 0 błędów, 2 pominięte**
+  (automatyczne testy integracyjne wymagają `TEST_DATABASE_URL`). Test mapy używa
+  atrap; rzeczywistej Google Maps ani Routes API nie zweryfikowano.
+- Wykonano odczytowy test połączenia z `outpost_db`: baza zawiera pięć pojazdów, a
+  API adaptera odczytuje wszystkie pięć z pozycjami, trasami i zleceniami. Test
+  używał transakcji `READ ONLY` i zakończył ją przez `ROLLBACK`; nie uruchamiano
+  migracji ani nie zmieniano danych. Wszystkie zapisane pozycje są obecnie starsze
+  niż 30 sekund i poprawnie oznaczane jako nieaktualne.
+- W przeglądarce sprawdzono widok floty z realnym API/PostgreSQL na porcie 3100.
+  Port 3000 był już zajęty przez inny proces, którego nie zatrzymywano. Brak
+  `GOOGLE_MAPS_API_KEY`, `GOOGLE_MAPS_MAP_ID` i `GOOGLE_ROUTES_API_KEY` uniemożliwił
+  weryfikację rzeczywistej mapy i trasy drogowej.
+
 ## Gotowe
 
+- Monitorowanie floty FR-01: API i UI z danymi z PostgreSQL, migracja oraz pięć
+  istniejących pojazdów potwierdzonych odczytem; Google Maps wymaga klucza API.
+- Historia 3 FR-01: interfejs, walidowane API, autoryzacja demonstracyjna, adaptery
+  demo/PostgreSQL oraz idempotentna migracja.
 - Historia 2 ze slajdu 18: oznaczenie ryzyka, powiadomienie w aplikacji, szczegóły,
   komunikat o niewystarczających danych. Widok przeglądarkowy i API.
 - ADR-005–ADR-007 w ADR.md, specyfikacja i plan FR-02.
@@ -9,7 +55,8 @@
   z wymaganiem nowego ETA, daty decyzji i edycja ETA.
 - Opis 4+1 i źródła diagramów dla zaimplementowanej historii: UML Component,
   Communication, Sequence, ERD i DFD w `docs/architektura.md`.
-- Testy FR-02: 11/11 zaliczonych na Node.js 22.22.1 (logika, lokalny HTTP oraz zdarzenia interfejsu w symulowanym DOM).
+- Testy FR-02 oraz FR-01 uruchomione razem; testy trwałości wymagają osobnego
+  `TEST_DATABASE_URL`.
 
 ## Czego jeszcze brakuje
 
@@ -19,9 +66,9 @@ Do materiałów na ocenę:
 - Rozszerzenia projektu architektury i modelu danych na cały zakres FR-01–FR-04,
   jeżeli prowadzący wymaga diagramów całej aplikacji, a nie zrealizowanego wycinka.
 - Uzgodnienia rozbieżności JavaScript (ADR i kod) / TypeScript (specyfikacja i konstytucja).
-- Próby adaptera na docelowej bazie PostgreSQL. Interfejs sprawdzono w bezgłowym
-  Firefoxie: trzy alerty, zatwierdzenie, odrzucenie, edycja ETA, ponowna ocena,
-  zachowanie zmian po odświeżeniu i układ mobilny. Próg i etykietę danych usunięto z UI.
+- Przeglądarkowej weryfikacji Google Maps z kluczem API/Map ID. Nie skonfigurowano
+  kluczy Google; testy UI używają atrap. Test trwałości po restarcie wymaga osobnego
+  `TEST_DATABASE_URL`; nie przeprowadzono migracji na działającej bazie.
 - Przeglądu zespołowego dokumentacji i rzeczywistego udziału AI przed oddaniem.
 
 Do wdrożenia produkcyjnego (poza tą historią demonstracyjną):
@@ -29,8 +76,10 @@ Do wdrożenia produkcyjnego (poza tą historią demonstracyjną):
 - Dostawcy ETA i zasad oceny wiarygodności/aktualności danych; zatwierdzonego progu ryzyka.
 - Uwierzytelniania i kontroli uprawnień (NFR-06), TLS (NFR-07).
 - Pomiarów i potwierdzenia NFR-01–NFR-05 oraz NFR-10; kopii zapasowych i monitoringu.
-- Pozostałych historii: monitorowania GPS, rejestracji i obsługi zgłoszeń, raportów kosztów.
-  Nie są wymagane do wykazania jednej historii na tę ocenę.
+- Źródła fizycznych lokalizacji GPS i automatycznego strumienia aktualizacji; obecna
+  flota korzysta z pięciu statycznych, symulowanych pozycji w bazie.
+- Pozostałych historii: rejestracji i obsługi zgłoszeń oraz raportów kosztów. Nie są
+  wymagane do wykazania zrealizowanych historii.
 
 Powiadomienia są wyliczane przy odczycie i prezentowane w aplikacji. Nie są wysyłane
 przez e-mail/push i nie są automatycznie odświeżane w tle. Zapisywana jest ostatnia

@@ -3,11 +3,44 @@ const { readFile } = require('node:fs/promises');
 const path = require('node:path');
 const { evaluateDelay, timestamp } = require('./delays');
 const { createOrderStore } = require('./orders');
-const assets = { '/': ['index.html', 'text/html; charset=utf-8'], '/app.js': ['app.js', 'text/javascript; charset=utf-8'], '/style.css': ['style.css', 'text/css; charset=utf-8'] };
-function createServer({ mode = 'demo', getOrders, store = createOrderStore(mode) } = {}) {
+const { createFleetStore } = require('./fleet');
+const assets = {
+  '/': ['index.html', 'text/html; charset=utf-8'],
+  '/monitoring-floty.html': ['../strona/monitoring-floty.html', 'text/html; charset=utf-8'],
+  '/app.js': ['app.js', 'text/javascript; charset=utf-8'],
+  '/fleet.js': ['fleet.js', 'text/javascript; charset=utf-8'],
+  '/style.css': ['style.css', 'text/css; charset=utf-8'],
+};
+function isLocalRequest(req) {
+  const address = req.socket.remoteAddress;
+  return address === '127.0.0.1' || address === '::1' || address === '::ffff:127.0.0.1';
+}
+function isSameOriginRequest(req) {
+  const origin = req.headers.origin;
+  if (!origin) return true;
+  try {
+    const parsedOrigin = new URL(origin);
+    const requestProtocol = req.socket.encrypted ? 'https:' : 'http:';
+    return parsedOrigin.protocol === requestProtocol && parsedOrigin.host === req.headers.host;
+  } catch {
+    return false;
+  }
+}
+function createServer({
+  mode = 'demo',
+  getOrders,
+  store = createOrderStore(mode),
+  fleetStore = createFleetStore(),
+  authorizeCompletion,
+  roadRoutesEnabled = Boolean(process.env.GOOGLE_ROUTES_API_KEY),
+} = {}) {
+  if (!['demo', 'postgres'].includes(mode)) throw new Error('DATA_SOURCE: dozwolone demo lub postgres.');
+  const authorize = authorizeCompletion
+    || (mode === 'demo' || process.env.DEMO_COMPLETION_AUTH === 'true'
+      ? req => isLocalRequest(req) ? ({ role: 'demo-authorized', userId: null }) : null
+      : () => null);
   const list = getOrders || (() => store.list());
   const snapshot = async () => ({ orders: (await list()).map(order => evaluateDelay(order, 5)) });
-  if (!['demo', 'postgres'].includes(mode)) throw new Error('DATA_SOURCE: dozwolone demo lub postgres.');
   return http.createServer(async (req, res) => {
     const send = (status, data) => {
       res.writeHead(status, { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store' });
@@ -15,7 +48,9 @@ function createServer({ mode = 'demo', getOrders, store = createOrderStore(mode)
     };
     try {
       const url = new URL(req.url, 'http://localhost');
-      if (req.method === 'PATCH' && url.pathname.startsWith('/api/orders/')) {
+      const completionMatch = url.pathname.match(/^\/api\/orders\/([^/]+)\/complete$/);
+      const orderMatch = url.pathname.match(/^\/api\/orders\/([^/]+)$/);
+      if (req.method === 'PATCH' && (completionMatch || orderMatch)) {
         if (!req.headers['content-type']?.startsWith('application/json')) return send(415, { error: 'Wymagany format JSON.' });
         let body = '';
         for await (const chunk of req) {
@@ -24,22 +59,79 @@ function createServer({ mode = 'demo', getOrders, store = createOrderStore(mode)
         }
         let command;
         try { command = JSON.parse(body); } catch { return send(400, { error: 'Nieprawidłowy JSON.' }); }
+        let id;
+        try {
+          id = decodeURIComponent((completionMatch || orderMatch)[1]);
+        } catch {
+          return send(400, { error: 'Nieprawidłowy identyfikator zlecenia.' });
+        }
+        if (!id || id.length > 128 || id.trim() !== id || /[\u0000-\u001f\u007f/]/.test(id)) {
+          return send(400, { error: 'Nieprawidłowy identyfikator zlecenia.' });
+        }
+        if (completionMatch) {
+          if (!command || Array.isArray(command) || typeof command !== 'object' || Object.keys(command).length !== 0) {
+            return send(400, { error: 'Zakończenie nie przyjmuje dodatkowych danych.' });
+          }
+          const principal = await authorize(req);
+          if (!principal) return send(403, { error: 'Brak uprawnienia do zakończenia transportu.' });
+          const completedBy = typeof principal.userId === 'string'
+            && principal.userId.trim().length > 0 && principal.userId.length <= 256
+            ? principal.userId.trim() : null;
+          const order = await store.complete(id, completedBy);
+          if (!order) return send(404, { error: 'Nie znaleziono zlecenia.' });
+          const data = await snapshot();
+          const current = data.orders.find(item => item.id === id) || order;
+          return send(200, { ...data, order: { ...current, delayStatus: current.status, status: current.transportStatus } });
+        }
         if (!command || !['approve', 'reject', 'reschedule'].includes(command.action)) return send(400, { error: 'Nieprawidłowa akcja.' });
         if (command.action === 'reschedule' && !Number.isFinite(timestamp(command.eta))) return send(400, { error: 'Podaj prawidłowy czas przyjazdu ze strefą czasową.' });
-        const id = decodeURIComponent(url.pathname.slice('/api/orders/'.length));
         if (!await store.update(id, command.action, command.eta)) return send(404, { error: 'Nie znaleziono zlecenia.' });
         return send(200, await snapshot());
       }
+      const roadRouteMatch = url.pathname.match(/^\/api\/vehicles\/([^/]+)\/road-route$/);
+      if (req.method === 'POST' && roadRouteMatch) {
+        if (!isLocalRequest(req)) return send(403, { error: 'Wyznaczanie trasy jest dostępne tylko lokalnie.' });
+        if (!isSameOriginRequest(req)) return send(403, { error: 'Nieprawidłowe źródło żądania trasy.' });
+        if (mode !== 'postgres') return send(503, { error: 'Wyznaczanie trasy wymaga DATA_SOURCE=postgres.' });
+        if (!roadRoutesEnabled) return send(503, { error: 'Opcjonalna usługa Google Routes API nie jest skonfigurowana.' });
+        let vehicleId;
+        try {
+          vehicleId = decodeURIComponent(roadRouteMatch[1]);
+        } catch {
+          return send(400, { error: 'Nieprawidłowy identyfikator pojazdu.' });
+        }
+        if (!vehicleId || vehicleId.length > 128 || vehicleId.trim() !== vehicleId || /[\u0000-\u001f\u007f/]/.test(vehicleId)) {
+          return send(400, { error: 'Nieprawidłowy identyfikator pojazdu.' });
+        }
+        const route = await fleetStore.roadRoute(vehicleId);
+        if (!route) return send(404, { error: 'Nie znaleziono aktywnej trasy pojazdu.' });
+        return send(200, { route });
+      }
       if (req.method !== 'GET') return send(405, { error: 'Niedozwolona metoda.' });
       if (url.pathname === '/api/delays') return send(200, await snapshot());
+      if (url.pathname === '/api/config') {
+        return send(200, {
+          googleMapsApiKey: process.env.GOOGLE_MAPS_API_KEY || null,
+          googleMapsMapId: process.env.GOOGLE_MAPS_MAP_ID || 'DEMO_MAP_ID',
+          roadRoutesEnabled: Boolean(roadRoutesEnabled),
+        });
+      }
+      if (url.pathname === '/api/vehicles') {
+        if (mode !== 'postgres') {
+          return send(503, { error: 'Monitoring floty wymaga DATA_SOURCE=postgres i skonfigurowanej bazy.' });
+        }
+        return send(200, { vehicles: await fleetStore.list(), staleAfterSeconds: 30 });
+      }
       const asset = assets[url.pathname];
       if (!asset) return send(404, { error: 'Nie znaleziono zasobu.' });
       const body = await readFile(path.join(__dirname, '../public', asset[0]));
       res.writeHead(200, { 'Content-Type': asset[1], 'X-Content-Type-Options': 'nosniff', 'Cache-Control': 'no-store',
-        'Content-Security-Policy': "default-src 'self'; object-src 'none'; base-uri 'none'; frame-ancestors 'none'" });
+        'Content-Security-Policy': "default-src 'self'; script-src 'self' https://maps.googleapis.com https://maps.gstatic.com; style-src 'self' 'unsafe-inline' https://maps.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data: blob: https://*.googleapis.com https://*.gstatic.com https://*.google.com; connect-src 'self' https://*.googleapis.com https://*.gstatic.com https://*.google.com; frame-src https://*.google.com; object-src 'none'; base-uri 'none'; frame-ancestors 'none'" });
       res.end(body);
     } catch (error) {
       if (error.statusCode === 409) return send(409, { error: error.message });
+      if ([400, 422, 502].includes(error.statusCode)) return send(error.statusCode, { error: error.message });
+      if (error.statusCode === 503) return send(503, { error: error.message });
       send(503, { error: 'Nie udało się pobrać danych. Spróbuj ponownie.' });
     }
   });

@@ -108,3 +108,48 @@ decyzję, przywraca wiarygodność ręcznie podanej prognozy i ponawia ocenę.
 Konsekwencje: Odrzucona dostawa pozostaje na liście uwagi do aktualizacji czasu.
 Zmiana nie kończy ani nie anuluje transportu. Istniejące rekordy rejected są traktowane
 jako niewiarygodne także wtedy, gdy starsza wersja nie zapisała eta_reliable=false.
+
+## ADR-009: Zakończenie transportu i integracja PostgreSQL (FR-01)
+
+Status: Przyjęty dla historii 3.
+
+Kontekst: FR-01 wymaga zakończenia zlecenia przez uprawnionego użytkownika i trwałego
+zapisu nowego statusu, ale projekt nie ma systemu logowania.
+
+Decyzja: Zapis wykonania przechowuje się oddzielnie od decyzji ETA w kolumnach
+`status`, `completed_at` i opcjonalnie `completed_by`. Migracja dodaje kolumny
+idempotentnie, zachowując istniejące rekordy. `PATCH /api/orders/:id/complete`
+wykonuje pojedynczy warunkowy `UPDATE ... WHERE status = 'in_progress' RETURNING`;
+równoczesna/powtórna próba zwraca HTTP 409, brak rekordu 404. Demo działa lokalnie.
+Tryb PostgreSQL odmawia domyślnie, a jawna autoryzacja demonstracyjna działa tylko
+z loopback. Identyfikator użytkownika może pochodzić wyłącznie z serwerowego,
+zaufanego autoryzatora.
+
+Konsekwencje: Demo przechowuje stan do restartu procesu; PostgreSQL jest trwałym
+źródłem prawdy w trybie postgres. Projekt nadal nie ma produkcyjnego uwierzytelniania
+ani TLS. `status` zwracany przez istniejący endpoint FR-02 nadal opisuje ocenę ETA;
+status realizacji jest zwracany osobno jako `transportStatus`, by zachować zgodność
+wsteczną API. Odpowiedź endpointu zakończenia zwraca dodatkowe `order.status` jako
+status wykonania i `order.delayStatus` jako ocenę ETA. Sekrety i konfiguracja
+połączenia pochodzą ze zmiennych środowiskowych.
+
+## ADR-010: Monitoring floty przez PostgreSQL i Google Maps (FR-01)
+
+Status: Przyjęty dla historii monitorowania floty.
+
+Kontekst: FR-01 wymaga trasy, pozycji, statusu zlecenia i aktualności GPS. Projekt nie
+ma fizycznych urządzeń GPS; dane demonstracyjne muszą pozostać trwałe w bazie.
+
+Decyzja: Tabele `vehicles`, `vehicle_routes` i `vehicle_locations` przechowują pojazdy,
+geometrię tras w JSONB i historię lokalizacji. Migracja 004 dodaje pięć powiązanych
+rekordów demonstracyjnych przez `ON CONFLICT DO NOTHING`. `GET /api/vehicles` pobiera
+najnowszą lokalizację, zlecenie i ETA z PostgreSQL, a ocenę opóźnienia oblicza przez
+istniejącą funkcję FR-02. W trybie demo endpoint floty jawnie zwraca 503, zamiast
+pozorować trwałe dane. Wiek GPS powyżej 30 sekund oznacza pozycję nieaktualną.
+Przeglądarka renderuje znaczniki i zapisane polilinie przez Google Maps JavaScript API.
+
+Konsekwencje: `GOOGLE_MAPS_API_KEY` jest przekazywany klientowi, więc nie jest
+sekretem — musi być ograniczony do referrerów aplikacji i Maps JavaScript API.
+Brak klucza nie blokuje tabeli pojazdów. Współrzędne są demonstracyjne; nie ma
+odbiornika GPS, automatycznego źródła pomiarów ani Directions API. Weryfikacja
+rzeczywistej bazy i Google Maps wymaga ich lokalnej konfiguracji.

@@ -3,21 +3,40 @@ function approvalConflict() {
   const error = new Error('Nie można zatwierdzić opóźnienia bez wiarygodnej prognozy. Najpierw zaktualizuj ETA.');
   error.statusCode = 409; return error;
 }
+function completionConflict() {
+  const error = new Error('Transport został już zakończony.');
+  error.statusCode = 409;
+  return error;
+}
 const initialOrders = [
-  { id: 'TR-001', route: 'Warszawa → Kraków', plannedAt: '2026-11-02T14:00:00+01:00', eta: '2026-11-02T14:25:00+01:00', etaReliable: true },
-  { id: 'TR-002', route: 'Łódź → Poznań', plannedAt: '2026-11-02T15:00:00+01:00', eta: '2026-11-02T15:40:00+01:00', etaReliable: true },
-  { id: 'TR-003', route: 'Gdańsk → Toruń', plannedAt: '2026-11-02T16:00:00+01:00', eta: '2026-11-02T16:15:00+01:00', etaReliable: true },
-  { id: 'TR-004', route: 'Wrocław → Opole', plannedAt: '2026-11-02T17:00:00+01:00', eta: null, etaReliable: false },
+  { id: 'TR-001', route: 'Warszawa → Kraków', plannedAt: '2026-11-02T14:00:00+01:00', eta: '2026-11-02T14:25:00+01:00', etaReliable: true, transportStatus: 'in_progress', completedAt: null, completedBy: null },
+  { id: 'TR-002', route: 'Łódź → Poznań', plannedAt: '2026-11-02T15:00:00+01:00', eta: '2026-11-02T15:40:00+01:00', etaReliable: true, transportStatus: 'in_progress', completedAt: null, completedBy: null },
+  { id: 'TR-003', route: 'Gdańsk → Toruń', plannedAt: '2026-11-02T16:00:00+01:00', eta: '2026-11-02T16:15:00+01:00', etaReliable: true, transportStatus: 'in_progress', completedAt: null, completedBy: null },
+  { id: 'TR-004', route: 'Wrocław → Opole', plannedAt: '2026-11-02T17:00:00+01:00', eta: null, etaReliable: false, transportStatus: 'in_progress', completedAt: null, completedBy: null },
 ];
-function createOrderStore(mode) {
+function mapDatabaseOrder(row) {
+  return {
+    id: row.id,
+    route: row.route,
+    plannedAt: row.planned_at?.toISOString() ?? null,
+    eta: row.eta?.toISOString() ?? null,
+    etaReliable: row.eta_reliable,
+    decision: row.decision,
+    decisionAt: row.decision_at?.toISOString() ?? null,
+    transportStatus: row.status,
+    completedAt: row.completed_at?.toISOString() ?? null,
+    completedBy: row.completed_by ?? null,
+  };
+}
+function createOrderStore(mode, { pool: suppliedPool } = {}) {
   const orders = structuredClone(initialOrders);
+  const getPool = () => suppliedPool || require('./database/db');
   return {
     async list() {
       if (mode === 'demo') return structuredClone(orders);
-      const pool = require('./database/db');
-      const { rows } = await pool.query('SELECT id, route, planned_at, eta, eta_reliable, decision, decision_at FROM transport_orders ORDER BY id');
-      return rows.map(row => ({ id: row.id, route: row.route, plannedAt: row.planned_at?.toISOString() ?? null,
-        eta: row.eta?.toISOString() ?? null, etaReliable: row.eta_reliable, decision: row.decision, decisionAt: row.decision_at?.toISOString() ?? null }));
+      const { rows } = await getPool().query(
+        'SELECT id, route, planned_at, eta, eta_reliable, decision, decision_at, status, completed_at, completed_by FROM transport_orders ORDER BY id');
+      return rows.map(mapDatabaseOrder);
     },
     async update(id, action, eta) {
       if (mode === 'demo') {
@@ -28,7 +47,7 @@ function createOrderStore(mode) {
         else Object.assign(order, { decision: action === 'approve' ? 'approved' : 'rejected', decisionAt: new Date().toISOString(), etaReliable: action === 'approve' });
         return true;
       }
-      const pool = require('./database/db');
+      const pool = getPool();
       if (action === 'approve') {
         const result = await pool.query(
           `UPDATE transport_orders SET decision = 'approved', decision_at = CURRENT_TIMESTAMP
@@ -43,6 +62,30 @@ function createOrderStore(mode) {
         ? await pool.query('UPDATE transport_orders SET eta = $2, eta_reliable = true, decision = NULL, decision_at = NULL WHERE id = $1', [id, eta])
         : await pool.query("UPDATE transport_orders SET decision = 'rejected', decision_at = CURRENT_TIMESTAMP, eta_reliable = false WHERE id = $1", [id]);
       return result.rowCount > 0;
+    },
+    async complete(id, completedBy = null) {
+      if (mode === 'demo') {
+        const order = orders.find(item => item.id === id);
+        if (!order) return null;
+        if (order.transportStatus === 'completed') throw completionConflict();
+        order.transportStatus = 'completed';
+        order.completedAt = new Date().toISOString();
+        order.completedBy = completedBy;
+        return structuredClone(order);
+      }
+
+      const pool = getPool();
+      const result = await pool.query(
+        `UPDATE transport_orders
+         SET status = 'completed', completed_at = CURRENT_TIMESTAMP, completed_by = $2
+         WHERE id = $1 AND status = 'in_progress'
+         RETURNING id, route, planned_at, eta, eta_reliable, decision, decision_at, status, completed_at, completed_by`,
+        [id, completedBy]);
+      if (result.rowCount) return mapDatabaseOrder(result.rows[0]);
+
+      const existing = await pool.query('SELECT status FROM transport_orders WHERE id = $1', [id]);
+      if (!existing.rowCount) return null;
+      throw completionConflict();
     },
   };
 }

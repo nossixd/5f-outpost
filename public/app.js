@@ -1,5 +1,6 @@
 const byId = id => document.getElementById(id);
 const labels = { at_risk: 'Ryzyko opóźnienia', on_time: 'W terminie', missing_data: 'Brak wiarygodnych danych', eta_update_required: 'Wymaga aktualizacji ETA' };
+const completionLabels = { in_progress: 'W realizacji', completed: 'Zakończono' };
 function statusLabel(order) {
   if (order.status === 'eta_update_required') return labels.eta_update_required;
   if (order.decision === 'approved') return `Opóźnienie potwierdzone · ${minutes(order.delayMinutes)} min`;
@@ -10,6 +11,7 @@ const minutes = value => new Intl.NumberFormat('pl-PL', { maximumFractionDigits:
 let latestRequest = 0;
 let saving = false;
 let editingOrder = null;
+let completingOrder = null;
 function element(tag, value, className) {
   const el = document.createElement(tag);
   if (value !== undefined) el.textContent = value;
@@ -21,7 +23,15 @@ function button(text, className, handler) {
   el.addEventListener('click', handler); return el;
 }
 function closeDialogs() {
-  for (const id of ['notifications', 'details', 'eta-dialog']) if (byId(id).open) byId(id).close();
+  for (const id of ['notifications', 'details', 'eta-dialog', 'complete-dialog']) if (byId(id).open) byId(id).close();
+}
+function confirmCompletion(order) {
+  if (saving || order.transportStatus === 'completed') return;
+  closeDialogs();
+  completingOrder = order;
+  byId('complete-confirmation').textContent = `Czy na pewno zakończyć transport ${order.id} · ${order.route}?`;
+  byId('complete-error').textContent = '';
+  byId('complete-dialog').showModal();
 }
 function actions(order) {
   const group = element('div', undefined, 'card-actions');
@@ -70,12 +80,18 @@ function render(data) {
   const rows = [];
   for (const order of data.orders) {
     const row = document.createElement('tr');
+    if (order.transportStatus === 'completed') row.className = 'completed-order';
     const name = element('td'); name.append(element('strong', order.id), element('small', order.route));
     row.append(name, element('td', date(order.plannedAt)), element('td', order.status === 'eta_update_required' ? 'Prognoza odrzucona' : order.etaReliable ? date(order.eta) : 'Brak wiarygodnego ETA'));
     const status = element('td'); status.append(element('span', statusLabel(order), `status-badge ${order.status === 'eta_update_required' ? order.status : order.decision || order.status}`));
     if (order.decisionAt) status.append(element('small', date(order.decisionAt)));
-    const control = element('td'); control.append(button('Zmień czas', 'secondary order-action', () => editTime(order)));
-    row.append(status, control); rows.push(row);
+    const execution = element('td');
+    execution.append(element('span', completionLabels[order.transportStatus] || 'Nieznany status', `status-badge ${order.transportStatus}`));
+    if (order.completedAt) execution.append(element('small', `Zakończono: ${date(order.completedAt)}`));
+    const control = element('td');
+    if (order.transportStatus !== 'completed') control.append(button('Zakończ transport', 'complete-order', () => confirmCompletion(order)));
+    control.append(button('Zmień czas', 'secondary order-action', () => editTime(order)));
+    row.append(status, execution, control); rows.push(row);
   }
   const risky = data.orders.filter(order => order.notification);
   byId('notification-count').textContent = String(risky.length);
@@ -85,14 +101,14 @@ function render(data) {
     byId(id).replaceChildren(...cards);
   }
   if (!rows.length) {
-    const row = document.createElement('tr'); const cell = element('td', 'Brak zleceń.'); cell.colSpan = 5; row.append(cell); rows.push(row);
+    const row = document.createElement('tr'); const cell = element('td', 'Brak zleceń.'); cell.colSpan = 6; row.append(cell); rows.push(row);
   }
   byId('orders').replaceChildren(...rows);
 }
 async function refresh() {
   if (saving) return;
   const requestId = ++latestRequest;
-  byId('error').textContent = ''; byId('refresh').disabled = true;
+  byId('error').textContent = ''; byId('success').textContent = ''; byId('refresh').disabled = true;
   try {
     const response = await fetch('/api/delays'); const data = await response.json();
     if (requestId !== latestRequest) return;
@@ -105,23 +121,29 @@ async function refresh() {
 async function save(id, command) {
   if (saving) return;
   saving = true; ++latestRequest;
-  byId('error').textContent = ''; byId('eta-error').textContent = ''; byId('detail-error').textContent = '';
+  byId('error').textContent = ''; byId('success').textContent = ''; byId('eta-error').textContent = ''; byId('detail-error').textContent = ''; byId('complete-error').textContent = '';
   const controls = document.querySelectorAll('button'); controls.forEach(control => { control.disabled = true; });
   try {
-    const response = await fetch(`/api/orders/${encodeURIComponent(id)}`, {
-      method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(command),
+    const isCompletion = command.action === 'complete';
+    const response = await fetch(`/api/orders/${encodeURIComponent(id)}${isCompletion ? '/complete' : ''}`, {
+      method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(isCompletion ? {} : command),
     });
     const data = await response.json();
     if (!response.ok) throw new Error(data.error);
     closeDialogs(); render(data);
+    if (isCompletion) byId('success').textContent = `Transport ${id} zakończono${data.order?.completedAt ? `: ${date(data.order.completedAt)}` : '.'}`;
   } catch (error) {
     const message = error.message || 'Nie udało się zapisać zmiany. Spróbuj ponownie.';
-    byId('error').textContent = message; byId('eta-error').textContent = message; byId('detail-error').textContent = message;
+    byId('error').textContent = message; byId('eta-error').textContent = message; byId('detail-error').textContent = message; byId('complete-error').textContent = message;
   } finally { saving = false; controls.forEach(control => { control.disabled = false; }); byId('refresh').disabled = false; }
 }
 byId('open-notifications').addEventListener('click', () => byId('notifications').showModal());
 byId('refresh').addEventListener('click', refresh);
 byId('eta-cancel').addEventListener('click', closeDialogs);
+byId('complete-cancel').addEventListener('click', closeDialogs);
+byId('complete-confirm').addEventListener('click', () => {
+  if (completingOrder) save(completingOrder.id, { action: 'complete' });
+});
 byId('eta-form').addEventListener('submit', event => {
   event.preventDefault();
   const value = new Date(byId('eta-input').value);

@@ -39,7 +39,11 @@ test('PostgreSQL: migracja ERD kopiuje stare dane, jest idempotentna i flota wid
   skip: connectionString ? false : 'Ustaw TEST_DATABASE_URL na osobnej bazie outpost_test.',
 }, async t => {
   const pool = await openIsolatedTestPool();
-  t.after(() => pool.end());
+  let newVehicleId;
+  t.after(async () => {
+    if (newVehicleId) await pool.query('DELETE FROM vehicle WHERE vehicle_id = $1', [newVehicleId]);
+    await pool.end();
+  });
 
   const prerequisites = await pool.query(`
     SELECT to_regclass('public.transport_orders') AS orders,
@@ -118,15 +122,36 @@ test('PostgreSQL: migracja ERD kopiuje stare dane, jest idempotentna i flota wid
   }
 
   const fleet = await createFleetStore({ pool }).list();
-  assert.equal(fleet.length, 5);
-  assert.ok(fleet.every(vehicle => vehicle.location.updatedAt
+  assert.ok(fleet.length >= 5);
+  const legacyVehicleIds = sourceVehicles.rows.map(vehicle => vehicle.id);
+  const migratedFleet = fleet.filter(vehicle => legacyVehicleIds.includes(vehicle.id));
+  assert.equal(migratedFleet.length, 5);
+  assert.ok(migratedFleet.every(vehicle => vehicle.location.updatedAt
     && vehicle.route.coordinates.length >= 2 && vehicle.order.id));
-  for (const vehicle of fleet) {
+  for (const vehicle of migratedFleet) {
     const newest = await pool.query(`
       SELECT max(updated_at) AS recorded_at FROM vehicle_locations
       WHERE vehicle_id = $1`, [vehicle.id]);
     assert.equal(Date.parse(vehicle.location.updatedAt), newest.rows[0].recorded_at.getTime());
   }
+
+  const registration = `IT-${randomUUID()}`;
+  const initialVehicleCount = fleet.length;
+  const insertedVehicle = await pool.query(`
+    INSERT INTO vehicle (registration_number, brand, model)
+    VALUES ($1, 'Test', 'Unassigned')
+    RETURNING vehicle_id`, [registration]);
+  newVehicleId = insertedVehicle.rows[0].vehicle_id;
+  const refreshedFleet = await createFleetStore({ pool }).list();
+  assert.equal(refreshedFleet.length, initialVehicleCount + 1);
+  const unassigned = refreshedFleet.find(vehicle => vehicle.id === registration);
+  assert.ok(unassigned);
+  assert.equal(unassigned.order, null);
+  assert.equal(unassigned.route, null);
+  assert.equal(unassigned.location.latitude, null);
+  assert.equal(unassigned.location.longitude, null);
+  assert.equal(unassigned.location.updatedAt, null);
+  assert.equal(unassigned.location.stale, null);
 });
 
 test('PostgreSQL: zlecenia i flota korzystają ze wspólnego ERD po aktualizacji ETA i zakończeniu', {

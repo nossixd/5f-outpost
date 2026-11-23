@@ -19,24 +19,24 @@ function coordinate(value, minimum, maximum, name) {
 function mapFleetRow(row, nowMs) {
   const updatedAt = isoDate(row.location_updated_at);
   const updatedAtMs = updatedAt ? Date.parse(updatedAt) : NaN;
+  const hasGps = row.location_updated_at !== null && row.location_updated_at !== undefined
+    || row.latitude !== null && row.latitude !== undefined
+    || row.longitude !== null && row.longitude !== undefined;
   const ageMs = Number.isFinite(updatedAtMs) ? Math.max(0, nowMs - updatedAtMs) : null;
-  const coordinates = row.route_coordinates;
-  if (!Array.isArray(coordinates) || coordinates.length < 2) {
-    throw new Error(`Nieprawidłowa geometria trasy pojazdu ${row.vehicle_id}.`);
-  }
-
-  const routeCoordinates = coordinates.map(point => ({
+  const coordinates = Array.isArray(row.route_coordinates) && row.route_coordinates.length >= 2
+    ? row.route_coordinates : null;
+  const routeCoordinates = coordinates?.map(point => ({
     lat: coordinate(point.lat, -90, 90, 'trasy'),
     lng: coordinate(point.lng, -180, 180, 'trasy'),
-  }));
-  const latitude = row.latitude === null ? null : coordinate(row.latitude, -90, 90, 'GPS');
-  const longitude = row.longitude === null ? null : coordinate(row.longitude, -180, 180, 'GPS');
-  const speedKmh = row.speed_kmh === null ? null : Number(row.speed_kmh);
+  })) || null;
+  const latitude = row.latitude === null || row.latitude === undefined ? null : coordinate(row.latitude, -90, 90, 'GPS');
+  const longitude = row.longitude === null || row.longitude === undefined ? null : coordinate(row.longitude, -180, 180, 'GPS');
+  const speedKmh = row.speed_kmh === null || row.speed_kmh === undefined ? null : Number(row.speed_kmh);
   if (speedKmh !== null && (!Number.isFinite(speedKmh) || speedKmh < 0 || speedKmh > 250)) {
     throw new Error(`Nieprawidłowa prędkość pojazdu ${row.vehicle_id}.`);
   }
 
-  const order = evaluateDelay({
+  const order = row.order_id === null || row.order_id === undefined ? null : evaluateDelay({
     id: row.order_id,
     route: row.order_route,
     plannedAt: isoDate(row.planned_at),
@@ -49,6 +49,7 @@ function mapFleetRow(row, nowMs) {
   return {
     id: row.vehicle_id,
     registration: row.registration,
+    brand: row.brand,
     model: row.model,
     speedKmh,
     location: {
@@ -58,15 +59,15 @@ function mapFleetRow(row, nowMs) {
       latitude,
       longitude,
       updatedAt,
-      ageSeconds: ageMs === null ? null : Math.ceil(ageMs / 1000),
-      stale: ageMs === null || ageMs > STALE_AFTER_MS,
+      ageSeconds: !hasGps || ageMs === null ? null : Math.ceil(ageMs / 1000),
+      stale: !hasGps ? null : ageMs === null || ageMs > STALE_AFTER_MS,
     },
-    route: {
+    route: row.route_id === null || row.route_id === undefined ? null : {
       id: row.route_id,
       name: row.route_name || row.order_route || 'Trasa planowana',
       coordinates: routeCoordinates,
     },
-    order: {
+    order: order ? {
       id: row.order_id,
       route: row.order_route,
       status: row.order_status,
@@ -78,7 +79,7 @@ function mapFleetRow(row, nowMs) {
       decision: order.decision,
       decisionAt: order.decisionAt,
       notification: order.notification,
-    },
+    } : null,
   };
 }
 
@@ -91,7 +92,7 @@ function createFleetStore({
     async list() {
       const { rows } = await getPool().query(`
         SELECT COALESCE(v.legacy_vehicle_id, v.vehicle_id::text) AS vehicle_id,
-               v.registration_number AS registration, v.model,
+               v.registration_number AS registration, v.brand, v.model,
                l.street, l.city, l.country, l.latitude, l.longitude,
                l.speed_kmh, l.recorded_at AS location_updated_at,
                COALESCE(r.legacy_route_id, r.route_id::text) AS route_id,
@@ -100,12 +101,19 @@ function createFleetStore({
                o.route AS order_route, o.status AS order_status,
                o.planned_at, o.eta, o.eta_reliable, o.decision, o.decision_at
         FROM vehicle v
-        JOIN LATERAL (
-          SELECT r.route_id, r.legacy_route_id, r.route_data, r.order_id
+        LEFT JOIN LATERAL (
+          SELECT o.order_id, o.legacy_order_id, o.route, o.status, o.planned_at,
+                 o.eta, o.eta_reliable, o.decision, o.decision_at, o.created_at
+          FROM "order" o
+          WHERE o.vehicle_id = v.vehicle_id AND o.status = 'in_progress'
+          ORDER BY o.created_at DESC, o.order_id DESC
+          LIMIT 1
+        ) o ON true
+        LEFT JOIN LATERAL (
+          SELECT r.route_id, r.legacy_route_id, r.route_data
           FROM route r
-          JOIN "order" assigned_order ON assigned_order.order_id = r.order_id
-          WHERE assigned_order.vehicle_id = v.vehicle_id AND r.active = true
-          ORDER BY r.created_at DESC, r.route_id
+          WHERE r.order_id = o.order_id AND r.active = true
+          ORDER BY r.created_at DESC, r.route_id DESC
           LIMIT 1
         ) r ON true
         LEFT JOIN LATERAL (
@@ -116,7 +124,6 @@ function createFleetStore({
           ORDER BY g.recorded_at DESC, g.location_id DESC
           LIMIT 1
         ) l ON true
-        JOIN "order" o ON o.order_id = r.order_id
         WHERE v.active = true
         ORDER BY v.vehicle_id`);
       return rows.map(row => mapFleetRow(row, now()));

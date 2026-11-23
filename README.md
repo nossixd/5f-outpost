@@ -132,6 +132,10 @@ status zlecenia z docelowych tabel ERD. Tabela pokazuje też ocenę ETA z istnie
 FR-02. Pozycja starsza niż 30 sekund jest oznaczana jako nieaktualna; nie ma fizycznego
 odbiornika ani automatycznego generatora nowych pomiarów.
 
+Lista i liczniki są odświeżane bezpośrednio z tabeli `vehicle`. Każdy aktywny pojazd
+pojawia się także bez zlecenia, trasy lub GPS; brak tych danych nie tworzy znacznika
+ani fikcyjnego ETA.
+
 W odpowiedzi `GET /api/delays` pole `status` zachowuje dotychczasowe znaczenie oceny
 ETA, a `transportStatus` opisuje wykonanie. Odpowiedź PATCH zakończenia zwraca
 dodatkowo `order.status=completed` i `order.delayStatus` dla oceny ETA.

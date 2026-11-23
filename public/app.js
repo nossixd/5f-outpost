@@ -105,10 +105,16 @@ function render(data) {
   }
   byId('orders').replaceChildren(...rows);
 }
+function refreshFleet() {
+  if (typeof document.dispatchEvent === 'function' && typeof CustomEvent === 'function') {
+    document.dispatchEvent(new CustomEvent('outpost-refresh-fleet'));
+  }
+}
 async function refresh() {
   if (saving) return;
   const requestId = ++latestRequest;
   byId('error').textContent = ''; byId('success').textContent = ''; byId('refresh').disabled = true;
+  refreshFleet();
   try {
     const response = await fetch('/api/delays'); const data = await response.json();
     if (requestId !== latestRequest) return;
@@ -130,7 +136,7 @@ async function save(id, command) {
     });
     const data = await response.json();
     if (!response.ok) throw new Error(data.error);
-    closeDialogs(); render(data);
+    closeDialogs(); render(data); refreshFleet();
     if (isCompletion) byId('success').textContent = `Transport ${id} zakończono${data.order?.completedAt ? `: ${date(data.order.completedAt)}` : '.'}`;
   } catch (error) {
     const message = error.message || 'Nie udało się zapisać zmiany. Spróbuj ponownie.';

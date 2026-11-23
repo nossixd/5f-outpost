@@ -31,8 +31,8 @@ w kodzie przeglądarki.
    powiązane zlecenie i jego status realizacji.
 6. API zwraca wielopunktową geometrię zapisanej trasy i ocenę ETA wyliczoną przez
    istniejącą logikę FR-02; decyzje, ETA i progi FR-02 nie są modyfikowane.
-7. Interfejs używa aktualnego Maps JavaScript API `AdvancedMarkerElement`; każdy
-   pojazd ma osobny znacznik z ikoną pojazdu i krótką informacją przy najechaniu.
+7. Interfejs używa Leaflet; każdy pojazd ma osobny znacznik i krótką informację
+   w popupie.
    Mapa jest dopasowana do wszystkich aktualnie dostępnych lokalizacji.
 8. Kliknięcie znacznika lub pojazdu na liście pokazuje szczegóły oraz przybliża
    zapisaną trasę. Kliknięcie innego pojazdu zastępuje wyróżnioną trasę poprzednią.
@@ -43,10 +43,8 @@ w kodzie przeglądarki.
 10. Pozycja starsza niż 30 sekund jest widocznie oznaczona jako nieaktualna; pozycja
    mająca dokładnie 30 sekund nie przekracza progu. Brak lub nieprawidłowy czas jest
    oznaczony jako nieaktualny.
-11. Gdy `GOOGLE_MAPS_API_KEY` nie jest skonfigurowany lub Google Maps nie może się
-   załadować, aplikacja pokazuje czytelny komunikat i nadal może wyświetlić dane
-   pojazdów. Klucz Maps jest kluczem klienta i musi być ograniczony do referrerów
-   aplikacji i Maps JavaScript API. Mapy Advanced Markers używają Map ID.
+11. Gdy kafelki OpenStreetMap nie mogą się załadować, aplikacja pokazuje czytelny
+   komunikat i nadal może wyświetlić dane pojazdów.
 12. Geometria z bazy jest jawnie opisana jako uproszczona, a nie dokładna droga.
    Opcjonalne Routes API może zostać wywołane tylko ręcznie po potwierdzeniu ryzyka
    kosztu; żądanie używa klucza serwerowego, nie zapisuje wyniku do bazy i nie jest
@@ -96,21 +94,18 @@ w kodzie przeglądarki.
 - **wtedy** API i interfejs oznaczają dane jako nieaktualne; aktualizacja mająca
   dokładnie 30 sekund nie jest oznaczona jako starsza niż próg.
 
-### Brak bazy lub klucza Google Maps
+### Brak bazy lub kafelków
 
 - Brak/niedostępność PostgreSQL skutkuje jawnym błędem API, bez zapasowej tablicy
   danych przeglądarkowych.
-- Brak klucza Maps albo błąd biblioteki pozostawia tabelę danych dostępną i pokazuje
-  informację, że mapa wymaga konfiguracji.
+- Niedostępność kafelków pozostawia tabelę danych dostępną i pokazuje informację o
+  niedostępności mapy.
 
 ## Weryfikacja
 
 Testy sprawdzają zapytanie do adaptera PostgreSQL i kształt odpowiedzi API, co
 najmniej pięć rekordów testowych, powiązanie ze zleceniem i wyniki FR-02, próg
-świeżości 30 sekund, błędy źródła danych, brak klucza Maps, Advanced Markers,
-hover/click, dopasowanie mapy, brak jej ponownego tworzenia przy odświeżeniu,
-opcjonalne żądanie Routes API i obsługę błędu. Test rzeczywistej migracji i odczytu
-PostgreSQL wymaga skonfigurowanej bazy; test Google Maps w przeglądarce wymaga
-ograniczonego klucza i Map ID, a trasa drogowa — osobnego klucza Routes API oraz
-akceptacji kosztu. Żadna z tych zewnętrznych usług nie może być raportowana jako
-faktycznie sprawdzona bez konfiguracji.
+świeżości 30 sekund, błędy źródła danych, Leaflet, kliknięcie pojazdu i trasę,
+dopasowanie mapy oraz brak osobnego widoku. Test rzeczywistej migracji i odczytu
+PostgreSQL wymaga skonfigurowanej bazy. Weryfikacja kafelków w przeglądarce wymaga
+połączenia sieciowego i nie jest zastępowana domniemaniem w testach automatycznych.

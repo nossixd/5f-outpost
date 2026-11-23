@@ -89,12 +89,12 @@ function mockPostgresPool() {
         row.status = 'completed';
         row.completed_at = new Date();
         row.completed_by = values[1];
-        return { rows: [{ ...row }], rowCount: 1 };
+        return { rows: [{ ...row, order_id: 1 }], rowCount: 1 };
       }
-      if (sql.includes('SELECT status FROM transport_orders')) {
+      if (sql.includes('SELECT status FROM "order"')) {
         return row.id === values[0] ? { rows: [{ status: row.status }], rowCount: 1 } : { rows: [], rowCount: 0 };
       }
-      if (sql.includes('SELECT id, route, planned_at')) return { rows: [{ ...row }], rowCount: 1 };
+      if (sql.includes('FROM "order" ORDER BY order_id')) return { rows: [{ ...row }], rowCount: 1 };
       throw new Error('Nieoczekiwane zapytanie testowe.');
     },
   };
@@ -116,7 +116,7 @@ test('FR-01: adapter PostgreSQL używa warunkowego parametryzowanego zapisu i od
   assert.equal(order.completedBy, 'trusted-user');
   assert.ok(order.completedAt);
   const write = pool.queries.find(query => query.sql.includes("SET status = 'completed'"));
-  assert.match(write.sql, /WHERE id = \$1 AND status = 'in_progress'/);
+  assert.match(write.sql, /WHERE \(legacy_order_id = \$1 OR \(legacy_order_id IS NULL AND order_id::text = \$1\)\) AND status = 'in_progress'/);
   assert.deepEqual(write.values, ['PG-1', 'trusted-user']);
 
   const restartedStore = createOrderStore('postgres', { pool });

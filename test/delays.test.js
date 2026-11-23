@@ -33,7 +33,8 @@ test('HTTP: demo, walidacja, statyczny widok, szczegóły i błędy', async t =>
   assert.equal(data.orders.filter(o => o.notification).length, 3); assert.equal(data.orders[3].status, 'missing_data');
   for (const asset of ['/', '/app.js', '/fleet.js', '/style.css']) assert.equal((await fetch(base + asset)).status, 200);
   const page = await fetch(base);
-  assert.match(page.headers.get('Content-Security-Policy'), /maps\.googleapis\.com/);
+  assert.match(page.headers.get('Content-Security-Policy'), /tile\.openstreetmap\.org/);
+  assert.doesNotMatch(page.headers.get('Content-Security-Policy'), /googleapis|gstatic/);
   assert.equal((await fetch(base + '/no-such-file')).status, 404);
   assert.equal((await fetch(base + '/api/delays', { method: 'POST' })).status, 405);
 });

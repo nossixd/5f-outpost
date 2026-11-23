@@ -13,14 +13,13 @@
    PostgreSQL, waliduje/współrzędne i ocenia świeżość po stronie serwera. W trybie
    demo bez bazy zwraca jawny HTTP 503 zamiast zastępczej tablicy.
 5. Zmienić widok floty na listę i panel mapy responsywny. Korzystać z
-   `AdvancedMarkerElement` i `PinElement` (biblioteka `marker`, Map ID); importować
+   Leaflet (`L.map`, `L.marker`, `L.popup`, `L.polyline`, `L.featureGroup`);
    biblioteki asynchronicznie. Utrzymywać mapę i znaczniki, aktualizować pozycje oraz
    dopasowywać widok do wszystkich pojazdów bez tworzenia mapy ponownie.
 6. Udostępnić podgląd trasy przy hover na liście, wybór i przybliżenie po kliknięciu,
    dymek po hover znacznika, szczegóły pojazdu i powrót do widoku wszystkich.
    Zapisana wielopunktowa geometria pozostaje wyraźnie oznaczona jako uproszczona.
-7. Klucz Maps pobierać z `GOOGLE_MAPS_API_KEY` jako klucz klienta, Map ID z
-   `GOOGLE_MAPS_MAP_ID`, zaktualizować CSP i udokumentować ograniczenia referrera.
+7. Serwować Leaflet z wersjonowanej zależności npm, użyć OpenStreetMap i zaktualizować CSP.
    Brak konfiguracji mapy nie może ukrywać listy pojazdów.
 8. Opcjonalne Routes API obsłużyć wyłącznie przez osobny klucz serwerowy i endpoint
    POST wywoływany po kliknięciu oraz potwierdzeniu użytkownika. Nie uruchamiać API

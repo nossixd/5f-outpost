@@ -1,7 +1,6 @@
 const { evaluateDelay } = require('./delays');
 
 const STALE_AFTER_MS = 30_000;
-const ROUTES_API_URL = 'https://routes.googleapis.com/directions/v2:computeRoutes';
 
 function isoDate(value) {
   if (value === null || value === undefined) return null;
@@ -15,38 +14,6 @@ function coordinate(value, minimum, maximum, name) {
     throw new Error(`Nieprawidłowa współrzędna ${name} w danych floty.`);
   }
   return number;
-}
-
-function decodePolyline(encoded) {
-  if (typeof encoded !== 'string' || encoded.length === 0) {
-    throw new Error('Google Routes API nie zwróciło poprawnej geometrii trasy.');
-  }
-  const coordinates = [];
-  let index = 0;
-  let latitude = 0;
-  let longitude = 0;
-  function readDelta() {
-    let result = 0;
-    let shift = 0;
-    let byte;
-    do {
-      if (index >= encoded.length || shift > 30) {
-        throw new Error('Google Routes API zwróciło nieprawidłową geometrię trasy.');
-      }
-      byte = encoded.charCodeAt(index++) - 63;
-      if (byte < 0 || byte > 63) throw new Error('Google Routes API zwróciło nieprawidłową geometrię trasy.');
-      result |= (byte & 0x1f) << shift;
-      shift += 5;
-    } while (byte >= 0x20);
-    return result & 1 ? ~(result >> 1) : result >> 1;
-  }
-  while (index < encoded.length) {
-    latitude += readDelta();
-    longitude += readDelta();
-    coordinates.push({ lat: latitude / 100_000, lng: longitude / 100_000 });
-    if (coordinates.length > 10_000) throw new Error('Geometria trasy Google jest zbyt długa.');
-  }
-  return coordinates;
 }
 
 function mapFleetRow(row, nowMs) {
@@ -96,7 +63,7 @@ function mapFleetRow(row, nowMs) {
     },
     route: {
       id: row.route_id,
-      name: row.route_name,
+      name: row.route_name || row.order_route || 'Trasa planowana',
       coordinates: routeCoordinates,
     },
     order: {
@@ -118,121 +85,43 @@ function mapFleetRow(row, nowMs) {
 function createFleetStore({
   pool: suppliedPool,
   now = Date.now,
-  routesApiKey = process.env.GOOGLE_ROUTES_API_KEY,
-  fetchImpl = globalThis.fetch,
 } = {}) {
   const getPool = () => suppliedPool || require('./database/db');
   return {
     async list() {
       const { rows } = await getPool().query(`
-        SELECT v.id AS vehicle_id, v.registration, v.model,
+        SELECT COALESCE(v.legacy_vehicle_id, v.vehicle_id::text) AS vehicle_id,
+               v.registration_number AS registration, v.model,
                l.street, l.city, l.country, l.latitude, l.longitude,
-               l.speed_kmh, l.updated_at AS location_updated_at,
-               r.id AS route_id, r.name AS route_name, r.coordinates AS route_coordinates,
-               o.id AS order_id, o.route AS order_route, o.status AS order_status,
+               l.speed_kmh, l.recorded_at AS location_updated_at,
+               COALESCE(r.legacy_route_id, r.route_id::text) AS route_id,
+               o.route AS route_name, r.route_data AS route_coordinates,
+               COALESCE(o.legacy_order_id, o.order_id::text) AS order_id,
+               o.route AS order_route, o.status AS order_status,
                o.planned_at, o.eta, o.eta_reliable, o.decision, o.decision_at
-        FROM vehicles v
+        FROM vehicle v
         JOIN LATERAL (
-          SELECT vr.id, vr.name, vr.coordinates, vr.order_id
-          FROM vehicle_routes vr
-          WHERE vr.vehicle_id = v.id AND vr.active = true
-          ORDER BY vr.created_at DESC, vr.id
+          SELECT r.route_id, r.legacy_route_id, r.route_data, r.order_id
+          FROM route r
+          JOIN "order" assigned_order ON assigned_order.order_id = r.order_id
+          WHERE assigned_order.vehicle_id = v.vehicle_id AND r.active = true
+          ORDER BY r.created_at DESC, r.route_id
           LIMIT 1
         ) r ON true
         LEFT JOIN LATERAL (
-          SELECT vl.street, vl.city, vl.country, vl.latitude, vl.longitude,
-                 vl.speed_kmh, vl.updated_at
-          FROM vehicle_locations vl
-          WHERE vl.vehicle_id = v.id AND vl.route_id = r.id
-          ORDER BY vl.updated_at DESC, vl.id DESC
+          SELECT g.street, g.city, g.country, g.latitude, g.longitude,
+                 g.speed_kmh, g.recorded_at
+          FROM gps_location g
+          WHERE g.vehicle_id = v.vehicle_id
+          ORDER BY g.recorded_at DESC, g.location_id DESC
           LIMIT 1
         ) l ON true
-        JOIN transport_orders o ON o.id = r.order_id
+        JOIN "order" o ON o.order_id = r.order_id
         WHERE v.active = true
-        ORDER BY v.id`);
+        ORDER BY v.vehicle_id`);
       return rows.map(row => mapFleetRow(row, now()));
-    },
-    async roadRoute(vehicleId) {
-      if (!routesApiKey) {
-        const error = new Error('Opcjonalna usługa Google Routes API nie jest skonfigurowana.');
-        error.statusCode = 503;
-        throw error;
-      }
-      const { rows } = await getPool().query(`
-        SELECT vr.name, vr.coordinates
-        FROM vehicle_routes vr
-        JOIN vehicles v ON v.id = vr.vehicle_id
-        WHERE v.id = $1 AND v.active = true AND vr.active = true
-        ORDER BY vr.created_at DESC, vr.id
-        LIMIT 1`, [vehicleId]);
-      if (!rows.length) return null;
-
-      const points = rows[0].coordinates;
-      if (!Array.isArray(points) || points.length < 2 || points.length > 12) {
-        const error = new Error('Zapisana trasa nie spełnia wymagań Google Routes API.');
-        error.statusCode = 422;
-        throw error;
-      }
-      const routePoints = points.map(point => ({
-        latitude: coordinate(point.lat, -90, 90, 'trasy'),
-        longitude: coordinate(point.lng, -180, 180, 'trasy'),
-      }));
-      const response = await fetchImpl(ROUTES_API_URL, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'X-Goog-Api-Key': routesApiKey,
-          'X-Goog-FieldMask': 'routes.distanceMeters,routes.duration,routes.polyline.encodedPolyline',
-        },
-        signal: AbortSignal.timeout(15_000),
-        body: JSON.stringify({
-          origin: { location: { latLng: routePoints[0] } },
-          destination: { location: { latLng: routePoints[routePoints.length - 1] } },
-          intermediates: routePoints.slice(1, -1).map(latLng => ({ location: { latLng } })),
-          travelMode: 'DRIVE',
-          routingPreference: 'TRAFFIC_UNAWARE',
-          computeAlternativeRoutes: false,
-          units: 'METRIC',
-        }),
-      });
-      if (!response.ok) {
-        const error = new Error('Google Routes API nie udostępniło trasy. Sprawdź klucz, rozliczenia i limity.');
-        error.statusCode = 502;
-        throw error;
-      }
-      const result = await response.json();
-      const route = result.routes?.[0];
-      if (!route?.polyline?.encodedPolyline) {
-        const error = new Error('Google Routes API nie zwróciło trasy dla tego pojazdu.');
-        error.statusCode = 502;
-        throw error;
-      }
-      const coordinates = decodePolyline(route.polyline.encodedPolyline);
-      if (coordinates.length < 2) {
-        const error = new Error('Google Routes API zwróciło zbyt krótką geometrię trasy.');
-        error.statusCode = 502;
-        throw error;
-      }
-      coordinates.forEach(point => {
-        coordinate(point.lat, -90, 90, 'trasy Google');
-        coordinate(point.lng, -180, 180, 'trasy Google');
-      });
-      const distanceMeters = Number(route.distanceMeters);
-      const durationSeconds = Number.parseFloat(route.duration);
-      if (!Number.isFinite(distanceMeters) || distanceMeters < 0
-        || !Number.isFinite(durationSeconds) || durationSeconds < 0) {
-        const error = new Error('Google Routes API zwróciło nieprawidłowy dystans lub czas trasy.');
-        error.statusCode = 502;
-        throw error;
-      }
-      return {
-        name: rows[0].name,
-        coordinates,
-        distanceMeters,
-        durationSeconds,
-      };
     },
   };
 }
 
-module.exports = { createFleetStore, mapFleetRow, decodePolyline, STALE_AFTER_MS };
+module.exports = { createFleetStore, mapFleetRow, STALE_AFTER_MS };

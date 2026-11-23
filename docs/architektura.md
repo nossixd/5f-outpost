@@ -15,21 +15,18 @@ warunkowy UPDATE; restart nie usuwa zapisu. Demo zachowuje zmiany do restartu pr
 Bez logowania autoryzacja demonstracyjna jest lokalna; w trybie PostgreSQL wymaga
 jawnego włączenia i działa tylko na loopback.
 
-Monitorowanie floty FR-01 jest osobnym widokiem w tej samej aplikacji. `GET
-/api/vehicles` pobiera z PostgreSQL aktywne pojazdy, najnowszą lokalizację, geometrię
-trasy oraz status i dane ETA powiązanego zlecenia. Pojazdy, trasy i lokalizacje są
-przechowywane w `vehicles`, `vehicle_routes` i `vehicle_locations`. Dane demonstracyjne
-pochodzą z migracji SQL; tryb demo bez PostgreSQL nie zastępuje ich tablicą w UI.
-Mapa korzysta z Maps JavaScript API `AdvancedMarkerElement` i `PinElement`; listę
-znaczników aktualizuje bez ponownego tworzenia mapy. Hover podświetla trasę, wybór
-pojazdu pokazuje szczegóły i powiększa mapę, a „Wszystkie pojazdy” przywraca pełny
-widok. Geometria z bazy jest uproszczona i nie jest opisywana jako dokładna droga.
-Klucz przeglądarkowy `GOOGLE_MAPS_API_KEY` ma ograniczenie referrera/API, a Advanced
-Markers używają `GOOGLE_MAPS_MAP_ID` (domyślnie testowego `DEMO_MAP_ID`).
-Opcjonalne Routes API jest wywoływane wyłącznie po kliknięciu i potwierdzeniu
-potencjalnej opłaty; osobny `GOOGLE_ROUTES_API_KEY` pozostaje po stronie serwera.
-Pomiar starszy niż 30 sekund jest oznaczany jako nieaktualny. Brak sprzętowego GPS
-i automatycznego strumienia pomiarów jest jawny.
+Monitoring tras i floty jest jedną zakładką w serwowanej stronie `public/index.html`.
+`GET /api/vehicles` pobiera z PostgreSQL aktywne pojazdy, najnowszą lokalizację,
+geometrię trasy oraz status i dane ETA powiązanego zlecenia. Stare tabele są zachowane,
+a migracja 005 kopiuje je do tabel ERD: `company`, `app_user`, `client`, `driver`,
+`vehicle`, `"order"`, `order_status_history`, `route`, `gps_location`, `report`,
+`cost`, `raw_cost_data` i `external_system`.
+
+Mapa używa lokalnego Leaflet 1.9.4 i kafelków OpenStreetMap. L.marker pokazuje pojazd,
+L.popup jego szczegóły, L.polyline zapisaną geometrię planowaną, a L.featureGroup oraz
+fitBounds dobierają widok. „Wszystkie pojazdy” usuwa wybór i dopasowuje granice.
+Pomiar starszy niż 30 sekund jest oznaczany jako nieaktualny. Projekt nie wywołuje
+routingu drogowego i nie udaje, że planowana linia jest przebiegiem po drogach.
 
 Aktualizacja FR-02: ADR-007 rozszerza historię o decyzje i ręczną zmianę ETA. Próg 5 minut
 jest regułą serwera, bez ustawienia w przeglądarce. PATCH /api/orders/:id przyjmuje
@@ -55,7 +52,7 @@ component "Serwer HTTP" as API
 component "Ocena ryzyka" as Risk
 component "Adapter zleceń" as Adapter
 component "Adapter floty" as Fleet
-component "Google Maps JS" as Maps
+component "Leaflet JS" as Maps
 database "PostgreSQL" as DB
 component "Dane demonstracyjne" as Demo
 Dyspozytor --> UI
@@ -67,7 +64,7 @@ Adapter --> Demo : tryb demo
 UI --> API : GET /api/vehicles
 API --> Fleet : listVehicles
 Fleet --> DB : SELECT pozycje, trasy, zlecenia
-UI --> Maps : Advanced Markers i trasy
+UI --> Maps : Markery, popupy i polilinie
 @enduml
 ```
 
@@ -104,7 +101,7 @@ participant "Przeglądarka" as UI
 participant "Serwer HTTP" as API
 participant "Adapter floty" as Fleet
 database PostgreSQL as DB
-participant "Google Maps JS" as Maps
+participant "Leaflet JS" as Maps
 Dyspozytor -> UI : wybiera Monitoring floty
 UI -> API : GET /api/vehicles
 API -> Fleet : list()
@@ -207,7 +204,7 @@ flowchart LR
     F1 -->|wiek GPS i ocena ETA FR-02| F2((5. Ocena i prezentacja floty))
     F2 -->|pozycja, status, trasa, świeżość| U
     U -->|wybór pojazdu| F3((6. Mapa i polilinia))
-    F3 -->|Google Maps JavaScript API| U
+    F3 -->|Leaflet i OpenStreetMap| U
 ```
 
 ## Zakończenie zlecenia: przebieg i współbieżność
@@ -243,11 +240,9 @@ i zwraca konflikt, nie nadpisując pierwotnego czasu.
 
 Lokalna przeglądarka komunikuje się z jednym procesem Node.js na 127.0.0.1:3000.
 W trybie demo proces korzysta z pamięci dla alertów i zakończenia; widok floty wymaga
-trybu postgres i istniejącego poola `pg`. Przeglądarka pobiera Maps JavaScript API
-bezpośrednio od Google z ograniczonym kluczem klienta; ewentualne wyznaczanie drogowe
-używa oddzielnego klucza serwerowego i ręcznie uruchamianego endpointu. Nie
-skonfigurowano środowiska produkcyjnego, reverse proxy, TLS, klucza Google ani
-fizycznego dostawcy GPS/ETA.
+trybu postgres i istniejącego poola `pg`. Leaflet i OpenStreetMap są ładowane bez
+klucza Google. Routing drogowy nie jest skonfigurowany. Nie skonfigurowano środowiska
+produkcyjnego, reverse proxy, TLS ani fizycznego dostawcy GPS/ETA.
 
 
 ## Aktualizacja procesu: decyzja lub zmiana czasu

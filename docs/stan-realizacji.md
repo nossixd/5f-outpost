@@ -17,35 +17,31 @@
 
 ## Monitorowanie floty — FR-01
 
-- Dodano widok „Monitoring floty”, API `GET /api/vehicles`, adapter PostgreSQL,
+- Dodano jedną zakładkę „Monitorowanie tras” z funkcjami floty, API `GET /api/vehicles`, adapter PostgreSQL,
   zapytanie łączące pojazdy, trasy, lokalizacje i istniejące zlecenia oraz ocenę ETA
   przez FR-02.
 - Migracja 004 tworzy trzy tabele i pięć symulowanych pojazdów z adresem, GPS,
   prędkością, trasą wielopunktową i powiązanym zleceniem; nie usuwa ani nie nadpisuje
   istniejących danych. Wiek lokalizacji powyżej 30 sekund jest sygnalizowany.
-- Mapa używa `AdvancedMarkerElement`/`PinElement`, utrzymuje markery przy odświeżaniu,
-  dopasowuje widok do floty i obsługuje podgląd/wybór tras. Klucz Maps jest z
-  `GOOGLE_MAPS_API_KEY`; bez niego lista działa z komunikatem o konfiguracji.
-- Uproszczone geometrie z PostgreSQL są opisane jako poglądowe. Opcjonalne Routes API
-  wymaga osobnego `GOOGLE_ROUTES_API_KEY`, jest uruchamiane wyłącznie ręcznie po
-  potwierdzeniu kosztu i nie zapisuje wyniku do bazy.
-- Testy nowych i istniejących funkcji: **26 zaliczonych, 0 błędów, 2 pominięte**
+- Mapa używa Leaflet 1.9.4 i OpenStreetMap, oznacza świeżość GPS, umożliwia wybór pojazdu,
+  popup, trasę planowaną i dopasowanie widoku przyciskiem „Wszystkie pojazdy”.
+- Zapisane geometrie z PostgreSQL są opisane jako planowane; routing drogowy nie jest
+  implementowany ani nie jest udawany.
+- Testy nowych i istniejących funkcji: **22 zaliczone, 0 błędów, 2 pominięte**
   (automatyczne testy integracyjne wymagają `TEST_DATABASE_URL`). Test mapy używa
-  atrap; rzeczywistej Google Maps ani Routes API nie zweryfikowano.
+  stałych danych. Rzeczywistej mapy z kafelkami nie zweryfikowano automatycznie.
 - Wykonano odczytowy test połączenia z `outpost_db`: baza zawiera pięć pojazdów, a
   API adaptera odczytuje wszystkie pięć z pozycjami, trasami i zleceniami. Test
   używał transakcji `READ ONLY` i zakończył ją przez `ROLLBACK`; nie uruchamiano
   migracji ani nie zmieniano danych. Wszystkie zapisane pozycje są obecnie starsze
   niż 30 sekund i poprawnie oznaczane jako nieaktualne.
-- W przeglądarce sprawdzono widok floty z realnym API/PostgreSQL na porcie 3100.
-  Port 3000 był już zajęty przez inny proces, którego nie zatrzymywano. Brak
-  `GOOGLE_MAPS_API_KEY`, `GOOGLE_MAPS_MAP_ID` i `GOOGLE_ROUTES_API_KEY` uniemożliwił
-  weryfikację rzeczywistej mapy i trasy drogowej.
+- Dodano migrację 005 ERD. Nie uruchomiono jej na działającej bazie; przed wykonaniem
+  wymagane są kopia zapasowa i świadome potwierdzenie operatora.
 
 ## Gotowe
 
-- Monitorowanie floty FR-01: API i UI z danymi z PostgreSQL, migracja oraz pięć
-  istniejących pojazdów potwierdzonych odczytem; Google Maps wymaga klucza API.
+- Monitorowanie tras i floty FR-01: jedno UI, API i mapa Leaflet z danymi z PostgreSQL,
+  migracja starych tabel oraz ERD kompatybilna migracja 005.
 - Historia 3 FR-01: interfejs, walidowane API, autoryzacja demonstracyjna, adaptery
   demo/PostgreSQL oraz idempotentna migracja.
 - Historia 2 ze slajdu 18: oznaczenie ryzyka, powiadomienie w aplikacji, szczegóły,
@@ -66,8 +62,8 @@ Do materiałów na ocenę:
 - Rozszerzenia projektu architektury i modelu danych na cały zakres FR-01–FR-04,
   jeżeli prowadzący wymaga diagramów całej aplikacji, a nie zrealizowanego wycinka.
 - Uzgodnienia rozbieżności JavaScript (ADR i kod) / TypeScript (specyfikacja i konstytucja).
-- Przeglądarkowej weryfikacji Google Maps z kluczem API/Map ID. Nie skonfigurowano
-  kluczy Google; testy UI używają atrap. Test trwałości po restarcie wymaga osobnego
+- Ręcznej weryfikacji kafelków Leaflet/OpenStreetMap i rzeczywistego przebiegu mapy.
+  Test trwałości po restarcie wymaga osobnego
   `TEST_DATABASE_URL`; nie przeprowadzono migracji na działającej bazie.
 - Przeglądu zespołowego dokumentacji i rzeczywistego udziału AI przed oddaniem.
 

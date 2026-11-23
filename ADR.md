@@ -133,23 +133,38 @@ wsteczną API. Odpowiedź endpointu zakończenia zwraca dodatkowe `order.status`
 status wykonania i `order.delayStatus` jako ocenę ETA. Sekrety i konfiguracja
 połączenia pochodzą ze zmiennych środowiskowych.
 
-## ADR-010: Monitoring floty przez PostgreSQL i Google Maps (FR-01)
+## ADR-010: Monitoring floty przez PostgreSQL i Leaflet (FR-01)
 
 Status: Przyjęty dla historii monitorowania floty.
 
 Kontekst: FR-01 wymaga trasy, pozycji, statusu zlecenia i aktualności GPS. Projekt nie
 ma fizycznych urządzeń GPS; dane demonstracyjne muszą pozostać trwałe w bazie.
 
-Decyzja: Tabele `vehicles`, `vehicle_routes` i `vehicle_locations` przechowują pojazdy,
-geometrię tras w JSONB i historię lokalizacji. Migracja 004 dodaje pięć powiązanych
-rekordów demonstracyjnych przez `ON CONFLICT DO NOTHING`. `GET /api/vehicles` pobiera
-najnowszą lokalizację, zlecenie i ETA z PostgreSQL, a ocenę opóźnienia oblicza przez
-istniejącą funkcję FR-02. W trybie demo endpoint floty jawnie zwraca 503, zamiast
-pozorować trwałe dane. Wiek GPS powyżej 30 sekund oznacza pozycję nieaktualną.
-Przeglądarka renderuje znaczniki i zapisane polilinie przez Google Maps JavaScript API.
+Decyzja: stare tabele `vehicles`, `vehicle_routes`, `vehicle_locations` i
+`transport_orders` pozostają w bazie dla zgodności. Migracja 005 dodaje równoległy
+schemat ERD, m.in. `company`, `app_user`, `client`, `driver`, `vehicle`, `"order"`,
+`order_status_history`, `route`, `gps_location`, `report`, `cost`,
+`raw_cost_data` i `external_system`; słowa `USER` oraz `ORDER` są cytowane.
+Migracja kopiuje bez kasowania istniejące pojazdy, zlecenia, trasy i pozycje.
+Klucze ERD pozostają liczbowe (`serial`/`bigserial`), a stare identyfikatory
+tekstowe są przechowywane w `legacy_vehicle_id`, `legacy_order_id`,
+`legacy_route_id` i `legacy_location_id`. Ponieważ tabele legacy nie zawierają
+wiarygodnych danych firmy, klienta ani kierowcy, migracja nie tworzy fikcyjnych
+rekordów tych encji; odpowiadające FK są nullable do czasu dostarczenia danych.
+Migracja kopiuje rekordy tylko przy braku konfliktu, aby jej ponowne uruchomienie
+nie nadpisało późniejszych zmian w schemacie docelowym.
 
-Konsekwencje: `GOOGLE_MAPS_API_KEY` jest przekazywany klientowi, więc nie jest
-sekretem — musi być ograniczony do referrerów aplikacji i Maps JavaScript API.
-Brak klucza nie blokuje tabeli pojazdów. Współrzędne są demonstracyjne; nie ma
-odbiornika GPS, automatycznego źródła pomiarów ani Directions API. Weryfikacja
-rzeczywistej bazy i Google Maps wymaga ich lokalnej konfiguracji.
+`GET /api/vehicles` odczytuje dane z nowych tabel ERD, najnowszą pozycję, zlecenie i
+ETA z PostgreSQL, a ocenę opóźnienia oblicza przez istniejącą funkcję FR-02.
+W trybie demo endpoint floty jawnie zwraca 503, zamiast pozorować trwałe dane.
+Wiek GPS powyżej 30 sekund oznacza pozycję nieaktualną.
+
+Mapa w zakładce „Monitorowanie tras” używa Leaflet 1.9.4 i kafelków OpenStreetMap.
+Znaczniki, popupy, polilinie, feature group i dopasowanie granic są realizowane po
+stronie przeglądarki z danych API. Zapisana geometria jest oznaczana jako planowana;
+projekt nie wywołuje usług routingu.
+
+Konsekwencje: nie ma klucza ani billing mapowego. OpenStreetMap i zależność Leaflet
+muszą być honorowane zgodnie z ich licencjami i zasadami użycia. Migracja wymaga
+konsultacji i kopii zapasowej przed wykonaniem. Współrzędne demonstracyjne nie zastępują
+fizycznego GPS ani procesu routingu. Mapę należy walidować ręcznie z rzeczywistą bazą.

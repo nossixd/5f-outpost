@@ -6,10 +6,14 @@ const { createOrderStore } = require('./orders');
 const { createFleetStore } = require('./fleet');
 const assets = {
   '/': ['index.html', 'text/html; charset=utf-8'],
-  '/monitoring-floty.html': ['../strona/monitoring-floty.html', 'text/html; charset=utf-8'],
   '/app.js': ['app.js', 'text/javascript; charset=utf-8'],
   '/fleet.js': ['fleet.js', 'text/javascript; charset=utf-8'],
   '/style.css': ['style.css', 'text/css; charset=utf-8'],
+  '/leaflet/leaflet.css': ['leaflet/dist/leaflet.css', 'text/css; charset=utf-8'],
+  '/leaflet/leaflet.js': ['leaflet/dist/leaflet.js', 'text/javascript; charset=utf-8'],
+  '/leaflet/images/marker-icon.png': ['leaflet/dist/images/marker-icon.png', 'image/png'],
+  '/leaflet/images/marker-icon-2x.png': ['leaflet/dist/images/marker-icon-2x.png', 'image/png'],
+  '/leaflet/images/marker-shadow.png': ['leaflet/dist/images/marker-shadow.png', 'image/png'],
 };
 function isLocalRequest(req) {
   const address = req.socket.remoteAddress;
@@ -32,7 +36,6 @@ function createServer({
   store = createOrderStore(mode),
   fleetStore = createFleetStore(),
   authorizeCompletion,
-  roadRoutesEnabled = Boolean(process.env.GOOGLE_ROUTES_API_KEY),
 } = {}) {
   if (!['demo', 'postgres'].includes(mode)) throw new Error('DATA_SOURCE: dozwolone demo lub postgres.');
   const authorize = authorizeCompletion
@@ -88,34 +91,8 @@ function createServer({
         if (!await store.update(id, command.action, command.eta)) return send(404, { error: 'Nie znaleziono zlecenia.' });
         return send(200, await snapshot());
       }
-      const roadRouteMatch = url.pathname.match(/^\/api\/vehicles\/([^/]+)\/road-route$/);
-      if (req.method === 'POST' && roadRouteMatch) {
-        if (!isLocalRequest(req)) return send(403, { error: 'Wyznaczanie trasy jest dostępne tylko lokalnie.' });
-        if (!isSameOriginRequest(req)) return send(403, { error: 'Nieprawidłowe źródło żądania trasy.' });
-        if (mode !== 'postgres') return send(503, { error: 'Wyznaczanie trasy wymaga DATA_SOURCE=postgres.' });
-        if (!roadRoutesEnabled) return send(503, { error: 'Opcjonalna usługa Google Routes API nie jest skonfigurowana.' });
-        let vehicleId;
-        try {
-          vehicleId = decodeURIComponent(roadRouteMatch[1]);
-        } catch {
-          return send(400, { error: 'Nieprawidłowy identyfikator pojazdu.' });
-        }
-        if (!vehicleId || vehicleId.length > 128 || vehicleId.trim() !== vehicleId || /[\u0000-\u001f\u007f/]/.test(vehicleId)) {
-          return send(400, { error: 'Nieprawidłowy identyfikator pojazdu.' });
-        }
-        const route = await fleetStore.roadRoute(vehicleId);
-        if (!route) return send(404, { error: 'Nie znaleziono aktywnej trasy pojazdu.' });
-        return send(200, { route });
-      }
       if (req.method !== 'GET') return send(405, { error: 'Niedozwolona metoda.' });
       if (url.pathname === '/api/delays') return send(200, await snapshot());
-      if (url.pathname === '/api/config') {
-        return send(200, {
-          googleMapsApiKey: process.env.GOOGLE_MAPS_API_KEY || null,
-          googleMapsMapId: process.env.GOOGLE_MAPS_MAP_ID || 'DEMO_MAP_ID',
-          roadRoutesEnabled: Boolean(roadRoutesEnabled),
-        });
-      }
       if (url.pathname === '/api/vehicles') {
         if (mode !== 'postgres') {
           return send(503, { error: 'Monitoring floty wymaga DATA_SOURCE=postgres i skonfigurowanej bazy.' });
@@ -124,16 +101,32 @@ function createServer({
       }
       const asset = assets[url.pathname];
       if (!asset) return send(404, { error: 'Nie znaleziono zasobu.' });
-      const body = await readFile(path.join(__dirname, '../public', asset[0]));
+      const base = asset[0].startsWith('leaflet/')
+        ? path.join(__dirname, '../node_modules')
+        : path.join(__dirname, '../public');
+      const body = await readFile(path.resolve(base, asset[0]));
       res.writeHead(200, { 'Content-Type': asset[1], 'X-Content-Type-Options': 'nosniff', 'Cache-Control': 'no-store',
-        'Content-Security-Policy': "default-src 'self'; script-src 'self' https://maps.googleapis.com https://maps.gstatic.com; style-src 'self' 'unsafe-inline' https://maps.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data: blob: https://*.googleapis.com https://*.gstatic.com https://*.google.com; connect-src 'self' https://*.googleapis.com https://*.gstatic.com https://*.google.com; frame-src https://*.google.com; object-src 'none'; base-uri 'none'; frame-ancestors 'none'" });
+        'Content-Security-Policy': "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https://tile.openstreetmap.org; connect-src 'self' https://tile.openstreetmap.org; object-src 'none'; base-uri 'none'; frame-ancestors 'none'" });
       res.end(body);
     } catch (error) {
-      if (error.statusCode === 409) return send(409, { error: error.message });
-      if ([400, 422, 502].includes(error.statusCode)) return send(error.statusCode, { error: error.message });
-      if (error.statusCode === 503) return send(503, { error: error.message });
-      send(503, { error: 'Nie udało się pobrać danych. Spróbuj ponownie.' });
-    }
+  console.error('[OUTPOST] Żądanie zakończyło się błędem.');
+
+  if (error.statusCode === 409) {
+    return send(409, { error: error.message });
+  }
+
+  if ([400, 422, 502].includes(error.statusCode)) {
+    return send(error.statusCode, { error: error.message });
+  }
+
+  if (error.statusCode === 503) {
+    return send(503, { error: 'Nie udało się pobrać danych. Spróbuj ponownie.' });
+  }
+
+  return send(503, {
+    error: 'Nie udało się pobrać danych. Spróbuj ponownie.'
+  });
+}
   });
 }
 module.exports = { createServer };
